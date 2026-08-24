@@ -60,8 +60,21 @@ PJ/
 1. Arduino IDE → Library Manager에서 **`NimBLE-Arduino`** 설치 (B보드용)
 2. **A보드** ← `A_board/A_board.ino` 업로드
 3. **B보드** ← `B_board/B_board.ino` 업로드
-4. 폰에 APK 설치 — GitHub **Releases** 에서 받거나 직접 빌드한 `app/AquaControl.apk` (첫 실행 시 블루투스·위치 권한 허용)
+4. 폰에 APK 설치 — 아래 **앱 설치** 절 참고 (첫 실행 시 블루투스·위치 권한 허용)
 5. 둘 다 전원 ON → 앱 ⚙️ → 연결방식 **블루투스** → 자동으로 `AquaControl` 검색·연결
+
+## 앱 설치 (처음 한 번만 — 이후엔 앱이 스스로 업데이트)
+
+**방법 1 — QR 스캔 (가장 쉬움)**: 폰 카메라로 아래 QR을 찍으면 **항상 최신 APK** 가 받아집니다. 새 버전이 나와도 QR은 그대로입니다.
+
+<img src="docs/apk_qr.png" width="280" alt="AquaControl APK 다운로드 QR">
+
+**방법 2 — 링크**: 폰 브라우저에서 열기 →
+`https://github.com/ericalapiestral-hash/A1/releases/latest/download/AquaControl.apk`
+
+**방법 3 — USB 설치**: 폰에서 [설정 → 개발자 옵션 → USB 디버깅] 켜고 USB 연결 후, PC에서 [install.cmd](install.cmd) 더블클릭.
+
+> 다운로드 설치 시 "출처를 알 수 없는 앱" 경고가 뜨면 **허용**하세요. 한 번 설치하면 그 뒤로는 앱 안의 자동 업데이트가 알아서 새 버전을 안내합니다.
 
 ## 앱 자동 업데이트 (GitHub Releases)
 
