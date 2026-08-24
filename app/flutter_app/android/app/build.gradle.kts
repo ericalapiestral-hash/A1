@@ -1,8 +1,27 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+// ===================================================================
+//  릴리스 서명
+//  android/key.properties 가 있으면 그 키로 서명하고, 없으면 디버그 키로 폴백.
+//  - 로컬: key.properties 를 직접 만들어 둠 (git 제외됨)
+//  - CI  : .github/workflows/release.yml 이 Secrets 로부터 생성
+//  ※ 자동 업데이트가 동작하려면 항상 같은 키로 서명돼야 한다.
+// ===================================================================
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        FileInputStream(keystorePropertiesFile).use { load(it) }
+    }
+}
+val hasReleaseKey = keystorePropertiesFile.exists() &&
+    keystoreProperties.getProperty("storeFile") != null
 
 android {
     namespace = "com.example.aqua_control"
@@ -25,11 +44,26 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (hasReleaseKey) {
+            create("release") {
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseKey) {
+                signingConfigs.getByName("release")
+            } else {
+                // key.properties 가 없을 때만 디버그 키 (배포용으로는 쓰지 말 것)
+                logger.warn("⚠ android/key.properties 없음 → 디버그 키로 서명합니다. 배포용이 아닙니다.")
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }

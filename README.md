@@ -72,11 +72,15 @@ const String kGithubOwner = 'YOUR_GITHUB_ID';   // ← 본인 GitHub 아이디
 const String kGithubRepo  = 'aqua-control';     // ← 저장소 이름
 ```
 
-**새 버전 배포 순서**
+**새 버전 배포 순서** — 태그만 올리면 [GitHub Actions](.github/workflows/release.yml)가 빌드·서명·릴리스까지 자동으로 합니다.
 1. `app/flutter_app/pubspec.yaml` 의 `version:` 올리기 (예: `1.1.0+2` → `1.2.0+3`)
-2. `flutter build apk --release`
-3. GitHub에서 Release 생성 — 태그는 **`v` + pubspec 버전** (예: `v1.2.0`), 빌드된 APK를 **에셋으로 첨부**
-4. 앱이 태그를 현재 버전과 비교해 자동으로 새 버전을 안내
+2. 커밋하고 태그 푸시
+   ```bash
+   git commit -am "v1.2.0" && git tag v1.2.0 && git push && git push --tags
+   ```
+3. 끝. Actions 가 APK를 빌드해 `v1.2.0` 릴리스를 만들고 첨부합니다. (Actions 탭에서 수동 실행도 가능 — 이때는 pubspec 버전으로 태그를 만듭니다)
+
+> 태그(`v1.2.0`)와 pubspec 버전(`1.2.0`)이 다르면 워크플로가 **실패**합니다. 버전이 어긋나면 앱의 업데이트 확인이 깨지기 때문에 일부러 막아 뒀습니다.
 
 | 항목 | 값 |
 |---|---|
@@ -85,8 +89,38 @@ const String kGithubRepo  = 'aqua-control';     // ← 저장소 이름
 | APK 저장 위치 | 앱 전용 외부 저장소 `.../Android/data/<패키지>/files/updates/` (저장소 권한 불필요) |
 | 필요 권한 | `INTERNET`, `REQUEST_INSTALL_PACKAGES` + Android 8.0↑ '이 출처의 앱 설치 허용' (앱이 설정 화면으로 안내) |
 
-> ⚠️ **서명 주의**: 현재 릴리스 빌드는 디버그 키로 서명됩니다([build.gradle.kts](app/flutter_app/android/app/build.gradle.kts)의 `signingConfig`). 업데이트 APK는 설치된 앱과 **서명이 같아야** 덮어쓸 수 있으므로, 항상 같은 PC에서 빌드하거나 릴리스 키스토어를 만들어 고정하세요. 서명이 다르면 설치가 "앱이 설치되지 않았습니다"로 실패합니다.
 > 저장소가 비공개면 GitHub API 조회에 토큰이 필요합니다. 공개 저장소를 권장합니다.
+
+### 자동 배포 최초 설정 (한 번만)
+
+자동 업데이트는 **모든 버전이 같은 키로 서명돼야** 동작합니다. CI 러너는 자체 디버그 키를 쓰므로, 릴리스 키스토어를 만들어 GitHub Secrets에 등록해야 합니다.
+
+**1. 키스토어 생성** — 비밀번호를 물어보면 직접 입력하세요.
+```bash
+keytool -genkeypair -v -keystore "$env:USERPROFILE\aqua-upload.jks" -storetype PKCS12 -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+```
+
+**2. Secrets 등록** — base64는 파일로, 비밀번호는 대화형 입력으로 넣습니다.
+```bash
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("$env:USERPROFILE\aqua-upload.jks")) | Out-File -Encoding ascii "$env:TEMP\ks.b64"; Get-Content "$env:TEMP\ks.b64" -Raw | gh secret set KEYSTORE_BASE64; Remove-Item "$env:TEMP\ks.b64"
+```
+```bash
+gh secret set KEYSTORE_PASSWORD; gh secret set KEY_PASSWORD; gh secret set KEY_ALIAS
+```
+`KEY_ALIAS` 는 `upload`, 나머지 둘은 1번에서 정한 비밀번호입니다. (PKCS12는 스토어/키 비밀번호가 같습니다.)
+
+**3. 로컬에서도 같은 키로 빌드하려면** `app/flutter_app/android/key.properties` 를 만드세요 (git 제외됨).
+```properties
+storeFile=C:/Users/<사용자>/aqua-upload.jks
+storePassword=<비밀번호>
+keyAlias=upload
+keyPassword=<비밀번호>
+```
+이 파일이 없으면 디버그 키로 폴백하며, 빌드 로그에 경고가 찍힙니다.
+
+> 🔑 **키스토어를 반드시 백업하세요.** 잃어버리면 기존 앱을 업데이트할 방법이 영영 없어집니다.
+>
+> ⚠️ **첫 전환 시 1회 재설치 필요**: 기존 `v1.1.0` 은 디버그 키로 서명돼 있어 새 키로 서명된 버전이 덮어쓰지 못합니다. 폰에서 앱을 삭제하고 새 버전을 한 번 새로 설치하세요. 그 이후로는 자동 업데이트가 계속 동작합니다.
 
 > ESP-NOW 채널 1 고정. B보드 STA MAC `80:F3:DA:5E:5C:7C` 는 A보드 `boardB_mac[]` 에 이미 입력됨.
 > 보드 교체 시: B보드 시리얼에 뜨는 MAC을 A보드에 다시 넣으세요.
