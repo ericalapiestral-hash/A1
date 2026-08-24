@@ -79,7 +79,12 @@ git push origin "v$Version"; if ($LASTEXITCODE -ne 0) { Fail '태그 push 실패
 # ---- 릴리스 ----
 Step "GitHub 릴리스 v$Version 생성"
 if ($Notes -eq '') { $Notes = "AquaControl v$Version" }
-gh release create "v$Version" "$apkDist#AquaControl.apk" --title "v$Version" --notes $Notes
+# APK 직다운로드가 막히는 폰 브라우저(Chrome 등)를 위한 ZIP 동봉.
+# 앱 내 자동 업데이트는 .apk 에셋만 사용하므로 ZIP 이 있어도 영향 없음.
+$zipPath = Join-Path $env:TEMP 'AquaControl.zip'
+if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+Compress-Archive -Path $apkDist -DestinationPath $zipPath
+gh release create "v$Version" "$apkDist#AquaControl.apk" "$zipPath#AquaControl.zip" --title "v$Version" --notes $Notes
 if ($LASTEXITCODE -ne 0) { Fail 'gh release create 실패' }
 
 Step '배포 완료!'

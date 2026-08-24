@@ -74,7 +74,13 @@ PJ/
 
 **방법 3 — USB 설치**: 폰에서 [설정 → 개발자 옵션 → USB 디버깅] 켜고 USB 연결 후, PC에서 [install.cmd](install.cmd) 더블클릭.
 
-> 다운로드 설치 시 "출처를 알 수 없는 앱" 경고가 뜨면 **허용**하세요. 한 번 설치하면 그 뒤로는 앱 안의 자동 업데이트가 알아서 새 버전을 안내합니다.
+**다운로드가 끝에서 멈출 때 — ZIP 우회 (23MB)**: 일부 폰 브라우저(Chrome)는 `.apk` 직다운로드를 마지막 검사 단계에서 무한 대기시킵니다. 그럴 땐 아래 QR로 **ZIP**을 받으세요 — 일반 파일로 취급돼 끝까지 받아지고, 크기도 절반입니다. 받은 뒤: 다운로드 알림(또는 내 파일 앱)에서 ZIP 탭 → **압축 해제** → 나온 `AquaControl.apk` 탭 → 설치.
+
+<img src="docs/apk_zip_qr.png" width="240" alt="AquaControl ZIP 다운로드 QR">
+
+`https://github.com/ericalapiestral-hash/A1/releases/latest/download/AquaControl.zip`
+
+> 다운로드 설치 시 "출처를 알 수 없는 앱" 경고가 뜨면 **허용**하세요. 한 번 설치하면 그 뒤로는 앱 안의 자동 업데이트(v1.3.0부터 끊겨도 이어받기)가 알아서 새 버전을 안내합니다.
 
 ## 앱 자동 업데이트 (GitHub Releases)
 
