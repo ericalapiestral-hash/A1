@@ -19,6 +19,7 @@ PJ/
 │  └─ flutter_app/            앱 소스(Flutter)
 │     └─ lib/updater.dart     앱 자동 업데이트 (GitHub Releases 확인·다운로드·설치)
 ├─ docs/                      배선도(png/svg) + 핀 연결표(md)  (배선도 재생성: _gen/build_diagrams.js)
+├─ deploy.cmd / deploy.ps1    원클릭 배포 (예: .\deploy.cmd 1.2.0)
 └─ README.md
 ```
 
@@ -72,15 +73,13 @@ const String kGithubOwner = 'YOUR_GITHUB_ID';   // ← 본인 GitHub 아이디
 const String kGithubRepo  = 'aqua-control';     // ← 저장소 이름
 ```
 
-**새 버전 배포 순서** — 태그만 올리면 [GitHub Actions](.github/workflows/release.yml)가 빌드·서명·릴리스까지 자동으로 합니다.
-1. `app/flutter_app/pubspec.yaml` 의 `version:` 올리기 (예: `1.1.0+2` → `1.2.0+3`)
-2. 커밋하고 태그 푸시
-   ```bash
-   git commit -am "v1.2.0" && git tag v1.2.0 && git push && git push --tags
-   ```
-3. 끝. Actions 가 APK를 빌드해 `v1.2.0` 릴리스를 만들고 첨부합니다. (Actions 탭에서 수동 실행도 가능 — 이때는 pubspec 버전으로 태그를 만듭니다)
-
-> 태그(`v1.2.0`)와 pubspec 버전(`1.2.0`)이 다르면 워크플로가 **실패**합니다. 버전이 어긋나면 앱의 업데이트 확인이 깨지기 때문에 일부러 막아 뒀습니다.
+**새 버전 배포** — 명령 하나로 끝납니다. [deploy.ps1](deploy.ps1) 이 버전올림 → 빌드 → 커밋 → 태그 → 푸시 → 릴리스 생성까지 전부 처리합니다.
+```bash
+.\deploy.cmd 1.2.0 "히터 자동 모드 개선"
+```
+- 첫 번째 인자: 새 버전 (pubspec 의 `version:` 과 릴리스 태그 `v1.2.0` 을 자동으로 맞춤)
+- 두 번째 인자: 릴리스 노트 (생략 가능)
+- 현재 버전보다 낮거나 같으면, 태그가 이미 있으면, 빌드가 실패하면 그 단계에서 멈춥니다.
 
 | 항목 | 값 |
 |---|---|
@@ -91,36 +90,10 @@ const String kGithubRepo  = 'aqua-control';     // ← 저장소 이름
 
 > 저장소가 비공개면 GitHub API 조회에 토큰이 필요합니다. 공개 저장소를 권장합니다.
 
-### 자동 배포 최초 설정 (한 번만)
-
-자동 업데이트는 **모든 버전이 같은 키로 서명돼야** 동작합니다. CI 러너는 자체 디버그 키를 쓰므로, 릴리스 키스토어를 만들어 GitHub Secrets에 등록해야 합니다.
-
-**1. 키스토어 생성** — 비밀번호를 물어보면 직접 입력하세요.
-```bash
-keytool -genkeypair -v -keystore "$env:USERPROFILE\aqua-upload.jks" -storetype PKCS12 -keyalg RSA -keysize 2048 -validity 10000 -alias upload
-```
-
-**2. Secrets 등록** — base64는 파일로, 비밀번호는 대화형 입력으로 넣습니다.
-```bash
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("$env:USERPROFILE\aqua-upload.jks")) | Out-File -Encoding ascii "$env:TEMP\ks.b64"; Get-Content "$env:TEMP\ks.b64" -Raw | gh secret set KEYSTORE_BASE64; Remove-Item "$env:TEMP\ks.b64"
-```
-```bash
-gh secret set KEYSTORE_PASSWORD; gh secret set KEY_PASSWORD; gh secret set KEY_ALIAS
-```
-`KEY_ALIAS` 는 `upload`, 나머지 둘은 1번에서 정한 비밀번호입니다. (PKCS12는 스토어/키 비밀번호가 같습니다.)
-
-**3. 로컬에서도 같은 키로 빌드하려면** `app/flutter_app/android/key.properties` 를 만드세요 (git 제외됨).
-```properties
-storeFile=C:/Users/<사용자>/aqua-upload.jks
-storePassword=<비밀번호>
-keyAlias=upload
-keyPassword=<비밀번호>
-```
-이 파일이 없으면 디버그 키로 폴백하며, 빌드 로그에 경고가 찍힙니다.
-
-> 🔑 **키스토어를 반드시 백업하세요.** 잃어버리면 기존 앱을 업데이트할 방법이 영영 없어집니다.
->
-> ⚠️ **첫 전환 시 1회 재설치 필요**: 기존 `v1.1.0` 은 디버그 키로 서명돼 있어 새 키로 서명된 버전이 덮어쓰지 못합니다. 폰에서 앱을 삭제하고 새 버전을 한 번 새로 설치하세요. 그 이후로는 자동 업데이트가 계속 동작합니다.
+**서명 규칙 (중요)**
+- 배포는 **항상 이 PC에서** `deploy.cmd` 로 하세요. APK가 이 PC의 디버그 키(`%USERPROFILE%\.android\debug.keystore`)로 서명되는데, 업데이트는 기존 앱과 **서명이 같아야** 설치되기 때문입니다. 다른 PC에서 빌드하면 "앱이 설치되지 않았습니다"로 실패합니다.
+- 🔑 `%USERPROFILE%\.android\debug.keystore` 파일을 USB나 클라우드에 **백업**해 두세요. Windows 재설치 등으로 이 파일이 사라지면 기존 설치된 앱을 업데이트할 방법이 없어집니다(재설치 필요). PC를 바꿀 땐 이 파일을 같은 위치에 복사하면 됩니다.
+- 나중에 정식 릴리스 키로 옮기고 싶으면 `app/flutter_app/android/key.properties` 만 만들면 됩니다([build.gradle.kts](app/flutter_app/android/app/build.gradle.kts)가 자동 인식). 단, 키를 바꾸는 시점엔 폰에서 1회 삭제 후 재설치가 필요합니다.
 
 > ESP-NOW 채널 1 고정. B보드 STA MAC `80:F3:DA:5E:5C:7C` 는 A보드 `boardB_mac[]` 에 이미 입력됨.
 > 보드 교체 시: B보드 시리얼에 뜨는 MAC을 A보드에 다시 넣으세요.

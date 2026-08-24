@@ -9,9 +9,9 @@ plugins {
 
 // ===================================================================
 //  릴리스 서명
-//  android/key.properties 가 있으면 그 키로 서명하고, 없으면 디버그 키로 폴백.
-//  - 로컬: key.properties 를 직접 만들어 둠 (git 제외됨)
-//  - CI  : .github/workflows/release.yml 이 Secrets 로부터 생성
+//  android/key.properties 가 있으면 그 키로 서명하고, 없으면 이 PC의
+//  디버그 키로 폴백한다. (현재 배포는 deploy.cmd = 디버그 키 방식)
+//  나중에 릴리스 키스토어로 옮기고 싶으면 key.properties 만 만들면 된다.
 //  ※ 자동 업데이트가 동작하려면 항상 같은 키로 서명돼야 한다.
 // ===================================================================
 val keystorePropertiesFile = rootProject.file("key.properties")
