@@ -87,10 +87,13 @@ class MonitorTab extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(12, 18, 12, 16),
       child: Column(
         children: [
-          NeoInset(
-            circle: true,
-            depth: 6,
-            child: SizedBox(width: 128, height: 128, child: gauge),
+          // 좁은 화면에서도 항상 정원(正圓) 유지: 가용 폭에 맞춰 줄어들되 비율 1:1 고정
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 128, maxHeight: 128),
+            child: AspectRatio(
+              aspectRatio: 1,
+              child: NeoInset(circle: true, depth: 6, child: gauge),
+            ),
           ),
           const SizedBox(height: 10),
           Text(label, style: const TextStyle(fontSize: 12, color: Neo.sub)),
