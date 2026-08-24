@@ -17,8 +17,8 @@ import 'package:http/http.dart' as http;
 /// ▼▼▼ 배포할 GitHub 저장소를 여기에 넣으세요 ▼▼▼
 ///     https://github.com/<owner>/<repo>  →  owner / repo
 /// 릴리스를 만들 때 태그를 `v1.1.0` 처럼 붙이고 APK 파일을 첨부하면 됩니다.
-const String kGithubOwner = 'YOUR_GITHUB_ID';
-const String kGithubRepo = 'aqua-control';
+const String kGithubOwner = 'ericalapiestral-hash';
+const String kGithubRepo = 'A1';
 
 /// 저장소가 아직 설정 전이면 업데이트 기능을 비활성화
 bool get kUpdateConfigured =>
