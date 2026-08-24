@@ -1,0 +1,60 @@
+# ===== Flutter / Dart =====
+app/flutter_app/build/
+app/flutter_app/.dart_tool/
+app/flutter_app/.flutter-plugins
+app/flutter_app/.flutter-plugins-dependencies
+app/flutter_app/.packages
+app/flutter_app/.pub-cache/
+app/flutter_app/.pub/
+
+# 루트에 남은 빈 빌드 폴더 (앞의 / 로 루트 고정 — app/flutter_app 은 제외되면 안 됨)
+/flutter_app/
+
+# 데스크톱 타깃의 대용량 임시 산출물 (flutter_windows.dll.pdb 등 수백 MB)
+app/flutter_app/windows/flutter/ephemeral/
+app/flutter_app/linux/flutter/ephemeral/
+app/flutter_app/macos/Flutter/ephemeral/
+
+# ===== Android =====
+app/flutter_app/android/.gradle/
+app/flutter_app/android/local.properties
+app/flutter_app/android/app/debug/
+app/flutter_app/android/app/profile/
+app/flutter_app/android/app/release/
+app/flutter_app/android/key.properties
+*.jks
+*.keystore
+
+# ===== 배포 산출물 =====
+# APK 는 저장소에 넣지 않고 GitHub Releases 에 첨부합니다 (파일당 46MB)
+*.apk
+*.aab
+
+# ===== Arduino / ESP32 빌드 산출물 =====
+_build/
+A_board/build/
+B_board/build/
+A_board_temp_test/build/
+B_board_test/build/
+UP200_pump/build/
+*.ino.bin
+*.ino.elf
+*.ino.map
+*.ino.partitions.bin
+*.ino.merged.bin
+*.ino.bootloader.bin
+
+# ===== 로컬 도구 설정 =====
+.claude/settings.local.json
+
+# ===== IDE =====
+.idea/
+*.iml
+.vscode/
+*.swp
+
+# ===== OS =====
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store

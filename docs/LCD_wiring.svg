@@ -1,0 +1,64 @@
+<svg width="980" height="640" viewBox="0 0 980 640" xmlns="http://www.w3.org/2000/svg" font-family="'Malgun Gothic','Segoe UI',system-ui,sans-serif">
+<title>병렬 LCD 배선도</title><desc>ESP32 B보드와 HD44780 16핀 캐릭터 LCD를 4비트 모드로 연결하는 배선도.</desc>
+<rect x="0" y="0" width="980" height="640" fill="#ffffff"/>
+<text x="40" y="40" font-size="20" font-weight="500" fill="#1a1a1a">병렬 캐릭터 LCD (HD44780, 16핀) — B보드 연결</text>
+<text x="40" y="64" font-size="13" fill="#6b7280">4비트 모드: RS·E·D4~D7 = 6핀 / 콘트라스트는 10kΩ 가변저항</text>
+
+<rect x="60" y="120" width="150" height="430" rx="10" fill="#ffffff" stroke="#2f6fb0" stroke-width="2"/>
+<text transform="translate(92,400) rotate(-90)" font-size="14" font-weight="500" fill="#1a1a1a">ESP32 B보드</text>
+<g font-size="12" fill="#1a1a1a" text-anchor="end">
+<text x="200" y="164">5V</text><text x="200" y="204">GND</text>
+<text x="200" y="264">IO13</text><text x="200" y="304">IO14</text>
+<text x="200" y="364">IO27</text><text x="200" y="404">IO16</text>
+<text x="200" y="444">IO17</text><text x="200" y="484">IO18</text>
+</g>
+<circle cx="210" cy="160" r="5" fill="#e8893c"/><circle cx="210" cy="200" r="5" fill="#6b7280"/>
+<circle cx="210" cy="260" r="5" fill="#2f6fb0"/><circle cx="210" cy="300" r="5" fill="#2f6fb0"/>
+<circle cx="210" cy="360" r="5" fill="#2f6fb0"/><circle cx="210" cy="400" r="5" fill="#2f6fb0"/>
+<circle cx="210" cy="440" r="5" fill="#2f6fb0"/><circle cx="210" cy="480" r="5" fill="#2f6fb0"/>
+
+<rect x="600" y="110" width="340" height="470" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+<text x="770" y="136" font-size="15" font-weight="500" text-anchor="middle" fill="#1a1a1a">캐릭터 LCD (16핀)</text>
+<g font-size="12.5" fill="#1a1a1a">
+<text x="616" y="168">1  VSS</text><text x="700" y="168" fill="#6b7280">→ GND</text>
+<text x="616" y="194">2  VDD</text><text x="700" y="194" fill="#6b7280">→ 5V</text>
+<text x="616" y="220">3  V0</text><text x="700" y="220" fill="#6b7280">→ 가변저항 가운데</text>
+<text x="616" y="246">4  RS</text><text x="700" y="246" fill="#2f6fb0">→ IO13</text>
+<text x="616" y="272">5  RW</text><text x="700" y="272" fill="#6b7280">→ GND</text>
+<text x="616" y="298">6  E</text><text x="700" y="298" fill="#2f6fb0">→ IO14</text>
+<text x="616" y="324">7  D0</text><text x="700" y="324" fill="#9aa0a6">미사용</text>
+<text x="616" y="350">8  D1</text><text x="700" y="350" fill="#9aa0a6">미사용</text>
+<text x="616" y="376">9  D2</text><text x="700" y="376" fill="#9aa0a6">미사용</text>
+<text x="616" y="402">10 D3</text><text x="700" y="402" fill="#9aa0a6">미사용</text>
+<text x="616" y="428">11 D4</text><text x="700" y="428" fill="#2f6fb0">→ IO27</text>
+<text x="616" y="454">12 D5</text><text x="700" y="454" fill="#2f6fb0">→ IO16</text>
+<text x="616" y="480">13 D6</text><text x="700" y="480" fill="#2f6fb0">→ IO17</text>
+<text x="616" y="506">14 D7</text><text x="700" y="506" fill="#2f6fb0">→ IO18</text>
+<text x="616" y="532">15 A</text><text x="700" y="532" fill="#6b7280">→ 5V (220Ω)</text>
+<text x="616" y="558">16 K</text><text x="700" y="558" fill="#6b7280">→ GND</text>
+</g>
+<circle cx="592" cy="242" r="3.5" fill="#2f6fb0"/><circle cx="592" cy="294" r="3.5" fill="#2f6fb0"/>
+<circle cx="592" cy="424" r="3.5" fill="#2f6fb0"/><circle cx="592" cy="450" r="3.5" fill="#2f6fb0"/>
+<circle cx="592" cy="476" r="3.5" fill="#2f6fb0"/><circle cx="592" cy="502" r="3.5" fill="#2f6fb0"/>
+
+<polyline points="210,260 360,260 360,242 592,242" fill="none" stroke="#2f6fb0" stroke-width="2.2"/>
+<polyline points="210,300 380,300 380,294 592,294" fill="none" stroke="#2f6fb0" stroke-width="2.2"/>
+<polyline points="210,360 400,360 400,424 592,424" fill="none" stroke="#2f6fb0" stroke-width="2.2"/>
+<polyline points="210,400 420,400 420,450 592,450" fill="none" stroke="#2f6fb0" stroke-width="2.2"/>
+<polyline points="210,440 440,440 440,476 592,476" fill="none" stroke="#2f6fb0" stroke-width="2.2"/>
+<polyline points="210,480 460,480 460,502 592,502" fill="none" stroke="#2f6fb0" stroke-width="2.2"/>
+
+<rect x="300" y="120" width="170" height="86" rx="8" fill="#f6f8fa" stroke="#c9b894"/>
+<text x="385" y="142" font-size="12.5" font-weight="500" text-anchor="middle" fill="#1a1a1a">10kΩ 가변저항</text>
+<text x="385" y="162" font-size="11" text-anchor="middle" fill="#6b7280">(글자 진하기 조절)</text>
+<text x="318" y="190" font-size="11" fill="#e8893c">5V</text>
+<text x="372" y="190" font-size="11" fill="#6b7280">V0</text>
+<text x="430" y="190" font-size="11" fill="#6b7280">GND</text>
+
+<g font-size="12" fill="#6b7280">
+<line x1="60" y1="610" x2="90" y2="610" stroke="#2f6fb0" stroke-width="3"/><text x="96" y="614" fill="#1a1a1a">신호(RS·E·D4~D7)</text>
+<line x1="260" y1="610" x2="290" y2="610" stroke="#e8893c" stroke-width="3"/><text x="296" y="614" fill="#1a1a1a">5V</text>
+<line x1="340" y1="610" x2="370" y2="610" stroke="#6b7280" stroke-width="3"/><text x="376" y="614" fill="#1a1a1a">GND</text>
+<text x="470" y="614" fill="#1a1a1a">LCD VDD·백라이트는 5V, 신호는 ESP32 3.3V로 동작</text>
+</g>
+</svg>
