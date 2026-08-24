@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dashboard.dart';
+import 'neo.dart';
 
 void main() => runApp(const AquaApp());
 
@@ -13,13 +14,13 @@ class AquaApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        brightness: Brightness.dark,
+        brightness: Brightness.light,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF0E7C86),
-          brightness: Brightness.dark,
+          seedColor: Neo.teal,
+          brightness: Brightness.light,
         ),
-        scaffoldBackgroundColor: const Color(0xFF0B1722),
-        fontFamily: 'Roboto',
+        scaffoldBackgroundColor: Neo.bg,
+        fontFamily: Neo.body, // GowunDodum — 본문 기본
       ),
       home: const DashboardScreen(),
     );

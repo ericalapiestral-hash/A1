@@ -188,6 +188,10 @@ class Updater extends ChangeNotifier {
   }
 
   /// APK 다운로드. 성공하면 저장된 파일 경로 반환.
+  /// - 20초간 데이터가 안 오면 끊긴 것으로 보고, 받은 지점부터 이어받기(Range)
+  ///   최대 4회 자동 재시도 — "끝에서 멈춤" 대응
+  /// - 3MB마다 디스크에 반영해 마지막 구간 몰아쓰기 정체 방지
+  /// - 완료 후 파일 크기를 릴리스 정보와 대조해 불완전 파일 설치를 차단
   Future<String?> download() async {
     final info = latest;
     if (info == null) return null;
@@ -197,46 +201,66 @@ class Updater extends ChangeNotifier {
     error = null;
     notifyListeners();
 
-    IOSink? sink;
     try {
       final dir = await _ch.invokeMethod<String>('updateDir');
       if (dir == null) {
         _fail('저장 폴더를 만들 수 없습니다.');
         return null;
       }
-      final file = File('$dir${Platform.pathSeparator}${info.apkName}');
-      if (await file.exists()) await file.delete();
+      // 버전(태그)을 파일명에 넣어, 옛 버전 조각에 이어받는 사고를 방지
+      final file =
+          File('$dir${Platform.pathSeparator}${info.tag}_${info.apkName}');
+      final expected = info.apkSize;
 
-      final client = http.Client();
+      // 같은 폴더의 다른(옛 버전) 파일은 정리
       try {
-        final req = http.Request('GET', Uri.parse(info.apkUrl))
-          ..headers['User-Agent'] = 'aqua-control-app';
-        final res = await client.send(req).timeout(const Duration(seconds: 30));
-        if (res.statusCode != 200) {
-          _fail('다운로드 실패 (${res.statusCode})');
-          return null;
+        await for (final e in Directory(dir).list()) {
+          if (e is File && e.path != file.path) await e.delete();
         }
+      } catch (_) {}
 
-        final total = res.contentLength ?? info.apkSize;
-        var received = 0;
-        sink = file.openWrite();
-        await for (final chunk in res.stream) {
-          sink.add(chunk);
-          received += chunk.length;
-          if (total > 0) {
-            final p = received / total;
-            // 화면 갱신을 과하게 하지 않도록 0.5% 단위로만 알림
-            if (p - progress >= 0.005 || p >= 1) {
-              progress = p > 1 ? 1 : p;
-              notifyListeners();
-            }
-          }
+      // 이미 다 받아둔 파일이 있으면 그대로 재사용
+      if (await file.exists()) {
+        final len = await file.length();
+        if (expected > 0 && len == expected) {
+          _downloadedPath = file.path;
+          progress = 1;
+          stage = UpdateStage.readyToInstall;
+          notifyListeners();
+          return file.path;
         }
-        await sink.flush();
-        await sink.close();
-        sink = null;
-      } finally {
-        client.close();
+        if (expected > 0 && len > expected) await file.delete();
+      }
+
+      const maxAttempts = 4;
+      Object? lastErr;
+      for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          await _fetchTo(file, info);
+          lastErr = null;
+          break;
+        } on TimeoutException catch (e) {
+          lastErr = e;
+        } on http.ClientException catch (e) {
+          lastErr = e;
+        } on IOException catch (e) {
+          lastErr = e;
+        }
+        // 잠깐 쉬었다가 받은 지점부터 이어받는다
+        await Future<void>.delayed(const Duration(seconds: 2));
+      }
+      if (lastErr != null) {
+        _fail('다운로드가 계속 끊깁니다. 네트워크를 확인하고 다시 시도하세요.\n'
+            '(받은 부분은 저장돼 있어 다음 시도는 이어서 받습니다)');
+        return null;
+      }
+
+      // 크기 검증 — 불완전한 파일로 설치 화면을 띄우지 않는다
+      final len = await file.length();
+      if (expected > 0 && len != expected) {
+        _fail('다운로드가 불완전합니다 '
+            '(${len ~/ 1024}KB / ${expected ~/ 1024}KB). 다시 시도하세요.');
+        return null;
       }
 
       _downloadedPath = file.path;
@@ -244,16 +268,62 @@ class Updater extends ChangeNotifier {
       stage = UpdateStage.readyToInstall;
       notifyListeners();
       return file.path;
-    } on TimeoutException {
-      _fail('다운로드 시간이 초과됐습니다.');
-      return null;
     } catch (e) {
       _fail('다운로드 실패: $e');
       return null;
+    }
+  }
+
+  /// 전송 1회분 — 파일 끝에서부터 Range 로 이어받는다.
+  Future<void> _fetchTo(File file, ReleaseInfo info) async {
+    var start = await file.exists() ? await file.length() : 0;
+    final expected = info.apkSize;
+    final client = http.Client();
+    IOSink? sink;
+    try {
+      final req = http.Request('GET', Uri.parse(info.apkUrl))
+        ..headers['User-Agent'] = 'aqua-control-app';
+      if (start > 0) req.headers['Range'] = 'bytes=$start-';
+      final res = await client.send(req).timeout(const Duration(seconds: 25));
+
+      if (start > 0 && res.statusCode == 200) {
+        start = 0; // 서버가 이어받기를 지원하지 않음 → 처음부터
+      } else if (res.statusCode != 200 && res.statusCode != 206) {
+        throw http.ClientException('다운로드 실패 (HTTP ${res.statusCode})');
+      }
+
+      sink = file.openWrite(
+          mode: start > 0 ? FileMode.append : FileMode.write);
+      var received = start;
+      var unflushed = 0;
+      final total =
+          expected > 0 ? expected : (res.contentLength ?? 0) + start;
+
+      // 20초간 데이터가 안 오면 TimeoutException → 바깥에서 이어받기 재시도
+      await for (final chunk
+          in res.stream.timeout(const Duration(seconds: 20))) {
+        sink.add(chunk);
+        received += chunk.length;
+        unflushed += chunk.length;
+        if (unflushed >= 3 * 1024 * 1024) {
+          await sink.flush();
+          unflushed = 0;
+        }
+        if (total > 0) {
+          final p = received / total;
+          // 화면 갱신을 과하게 하지 않도록 0.5% 단위로만 알림
+          if (p - progress >= 0.005 || p >= 1) {
+            progress = p > 1 ? 1 : p;
+            notifyListeners();
+          }
+        }
+      }
+      await sink.flush();
     } finally {
       try {
         await sink?.close();
       } catch (_) {}
+      client.close();
     }
   }
 

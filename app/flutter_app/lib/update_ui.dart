@@ -6,9 +6,10 @@ import 'updater.dart';
 //  업데이트 UI — 확인 / 다운로드 진행률 / 설치 안내
 // ===================================================================
 
-const _teal = Color(0xFF2DD4BF);
-const _deep = Color(0xFF06303A);
-const _sheetBg = Color(0xFF13283A);
+// C 시안(웜 네오모피즘) 라이트 팔레트
+const _teal = Color(0xFF0F766E);
+const _deep = Color(0xFFFFFFFF); // 틸 버튼 위 글자색
+const _sheetBg = Color(0xFFF7F5F1);
 
 /// 업데이트 확인 → 새 버전이 있으면 안내 다이얼로그를 띄운다.
 ///
@@ -71,17 +72,17 @@ class _UpdateDialogState extends State<UpdateDialog> {
         builder: (_) => AlertDialog(
           backgroundColor: _sheetBg,
           title: const Text('설치 권한 필요',
-              style: TextStyle(color: Colors.white, fontSize: 17)),
+              style: TextStyle(color: Color(0xFF1B1D20), fontSize: 17)),
           content: const Text(
             '이 앱이 업데이트를 설치하려면 "이 출처의 앱 설치 허용"을 켜야 합니다.\n'
             '설정 화면으로 이동할까요?',
-            style: TextStyle(color: Colors.white70, fontSize: 13.5),
+            style: TextStyle(color: Color(0xFF5A6069), fontSize: 13.5),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
               child: const Text('취소',
-                  style: TextStyle(color: Colors.white54)),
+                  style: TextStyle(color: Color(0xFF8A8F98))),
             ),
             TextButton(
               onPressed: () => Navigator.pop(context, true),
@@ -124,7 +125,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
                 Container(
                   padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
-                    color: _teal.withOpacity(0.15),
+                    color: _teal.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(Icons.system_update,
@@ -133,7 +134,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
                 const SizedBox(width: 11),
                 const Text('새 버전이 있습니다',
                     style: TextStyle(
-                        color: Colors.white,
+                        color: Color(0xFF1B1D20),
                         fontSize: 16.5,
                         fontWeight: FontWeight.w700)),
               ],
@@ -144,12 +145,12 @@ class _UpdateDialogState extends State<UpdateDialog> {
               children: [
                 Row(
                   children: [
-                    _versionChip('현재  v${u.currentVersion}', Colors.white24,
-                        Colors.white60),
+                    _versionChip('현재  v${u.currentVersion}', Color(0xFFC9CCD1),
+                        Color(0xFF8A8F98)),
                     const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 8),
                       child: Icon(Icons.arrow_forward,
-                          color: Colors.white38, size: 15),
+                          color: Color(0xFF9AA0A6), size: 15),
                     ),
                     _versionChip('v${info.version}', _teal, _deep,
                         filled: true),
@@ -159,19 +160,19 @@ class _UpdateDialogState extends State<UpdateDialog> {
                   const SizedBox(height: 10),
                   Text('${info.apkName} · ${info.sizeText}',
                       style: const TextStyle(
-                          color: Colors.white38, fontSize: 11.5)),
+                          color: Color(0xFF9AA0A6), fontSize: 11.5)),
                 ],
                 if (info.notes.isNotEmpty) ...[
                   const SizedBox(height: 14),
                   const Text('변경 내용',
-                      style: TextStyle(color: Colors.white54, fontSize: 12)),
+                      style: TextStyle(color: Color(0xFF8A8F98), fontSize: 12)),
                   const SizedBox(height: 6),
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxHeight: 150),
                     child: SingleChildScrollView(
                       child: Text(info.notes,
                           style: const TextStyle(
-                              color: Colors.white70,
+                              color: Color(0xFF5A6069),
                               fontSize: 13,
                               height: 1.45)),
                     ),
@@ -184,7 +185,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
                     child: LinearProgressIndicator(
                       value: u.progress > 0 ? u.progress : null,
                       minHeight: 7,
-                      backgroundColor: Colors.white12,
+                      backgroundColor: Color(0xFFE8E4DB),
                       valueColor:
                           const AlwaysStoppedAnimation<Color>(_teal),
                     ),
@@ -192,7 +193,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
                   const SizedBox(height: 7),
                   Text('내려받는 중… ${(u.progress * 100).toStringAsFixed(0)}%',
                       style: const TextStyle(
-                          color: Colors.white54, fontSize: 12)),
+                          color: Color(0xFF8A8F98), fontSize: 12)),
                 ],
                 if (ready) ...[
                   const SizedBox(height: 16),
@@ -203,7 +204,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
                   const SizedBox(height: 16),
                   Text(u.error!,
                       style: const TextStyle(
-                          color: Color(0xFFF87171), fontSize: 12.5)),
+                          color: Color(0xFFC94F3D), fontSize: 12.5)),
                 ],
               ],
             ),
@@ -212,7 +213,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
                 onPressed: busy ? null : () => Navigator.pop(context),
                 child: Text(ready ? '닫기' : '나중에',
                     style: TextStyle(
-                        color: busy ? Colors.white24 : Colors.white54)),
+                        color: busy ? Color(0xFFC9CCD1) : Color(0xFF8A8F98))),
               ),
               FilledButton(
                 style: FilledButton.styleFrom(backgroundColor: _teal),
