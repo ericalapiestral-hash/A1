@@ -17,6 +17,7 @@ app/flutter_app/macos/Flutter/ephemeral/
 
 # ===== Android =====
 app/flutter_app/android/.gradle/
+app/flutter_app/android/.kotlin/
 app/flutter_app/android/local.properties
 app/flutter_app/android/app/debug/
 app/flutter_app/android/app/profile/
