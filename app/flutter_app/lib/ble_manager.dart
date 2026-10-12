@@ -10,6 +10,13 @@ class BleManager {
   static final Guid svcUuid = Guid('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
   static final Guid cmdUuid = Guid('6e400002-b5a3-f393-e0a9-e50e24dcca9e');
   static final Guid statusUuid = Guid('6e400003-b5a3-f393-e0a9-e50e24dcca9e');
+  // 실제 Aquarium 보드에서 확인된 구성: 상태 ...02, 명령 ...03.
+  static final Guid aquariumSvcUuid =
+      Guid('4f7f1234-1234-5678-1234-aaaa00000001');
+  static final Guid aquariumStatusUuid =
+      Guid('4f7f1234-1234-5678-1234-aaaa00000002');
+  static final Guid aquariumCmdUuid =
+      Guid('4f7f1234-1234-5678-1234-aaaa00000003');
 
   final Duration scanTimeout;
   final Duration serviceRetryDelay;
@@ -30,9 +37,17 @@ class BleManager {
   int _session = 0;
   bool _ready = false;
   final List<int> _rxBuf = [];
+  final List<int> _statusSample = [];
+  int _jsonDepth = 0;
+  bool _inJsonString = false, _jsonEscaped = false;
   String _diagnostics = '';
 
-  String get diagnostics => _diagnostics;
+  String get diagnostics =>
+      _diagnostics +
+      (_statusSample.isEmpty
+          ? ''
+          : '\n수신 예시 (최대 1024바이트):\n'
+              '${utf8.decode(_statusSample, allowMalformed: true)}');
 
   static bool matchesDevice(ScanResult result) =>
       deviceNames
@@ -58,6 +73,7 @@ class BleManager {
       await _cleanup();
       if (session != _session) return;
       _diagnostics = '';
+      _statusSample.clear();
       try {
         onProgress?.call('블루투스 상태를 확인합니다.');
         if (!await FlutterBluePlus.isSupported) {
@@ -122,7 +138,7 @@ class BleManager {
       if (state == BluetoothConnectionState.disconnected && _ready) {
         _ready = false;
         _cmd = null;
-        _rxBuf.clear();
+        _resetFrame();
         onConnection?.call(false);
       }
     });
@@ -134,7 +150,10 @@ class BleManager {
         '기기: ${device.platformName} (${device.remoteId})\n'
         '앱 서비스: $svcUuid\n'
         '명령 쓰기: $cmdUuid\n'
-        '상태 알림: $statusUuid\n';
+        '상태 알림: $statusUuid\n'
+        'Aquarium 서비스: $aquariumSvcUuid\n'
+        'Aquarium 명령 쓰기: $aquariumCmdUuid\n'
+        'Aquarium 상태 알림: $aquariumStatusUuid\n';
     var services = await device.discoverServices();
     if (session != _session) return;
     _recordServices(services, '첫 서비스 검색');
@@ -164,7 +183,10 @@ class BleManager {
     }
     final status = profile.status;
     _cmd = profile.command;
-    _diagnostics += '\n사용 서비스: ${status.serviceUuid}\n';
+    _diagnostics += '\n사용 구성: ${profile.name}\n'
+        '사용 서비스: ${status.serviceUuid}\n'
+        '사용 명령 쓰기: ${profile.command.uuid}\n'
+        '사용 상태 알림: ${status.uuid}\n';
     onProgress?.call('센서 상태 알림을 등록합니다.');
     // 알림을 활성화하기 전에 구독하여 첫 패킷부터 받는다.
     _statusSub = status.onValueReceived.listen((value) {
@@ -175,6 +197,15 @@ class BleManager {
     if (!device.isConnected) throw StateError('설정 중 블루투스 연결이 끊겼습니다.');
     _ready = true;
     onConnection?.call(true);
+    if (status.properties.read) {
+      try {
+        // read 결과도 onValueReceived로 수신된다. 다음 notify 전 상태를 읽는다.
+        await status.read(timeout: 5);
+      } catch (error) {
+        // 초기 read 실패로 정상적인 notify 연결까지 해제하지 않는다.
+        if (session == _session) _diagnostics += '\n초기 상태 읽기 실패: $error\n';
+      }
+    }
   }
 
   // 펌웨어가 서비스 UUID만 바꾼 경우에도 알려진 명령/상태 UUID 쌍을
@@ -182,25 +213,31 @@ class BleManager {
   static _BleProfile? _resolveProfile(List<BluetoothService> services) {
     final matches = <_BleProfile>[];
     for (final service in services) {
+      final aquarium = service.uuid == aquariumSvcUuid;
+      final commandId = aquarium ? aquariumCmdUuid : cmdUuid;
+      final statusId = aquarium ? aquariumStatusUuid : statusUuid;
       final commands = service.characteristics.where((c) =>
-          c.uuid == cmdUuid &&
+          c.uuid == commandId &&
           (c.properties.write || c.properties.writeWithoutResponse));
       final statuses = service.characteristics.where((c) =>
-          c.uuid == statusUuid &&
-          (c.properties.notify || c.properties.indicate));
+          c.uuid == statusId && (c.properties.notify || c.properties.indicate));
       if (commands.length != 1 || statuses.length != 1) continue;
-      final profile = _BleProfile(commands.single, statuses.single);
-      if (service.uuid == svcUuid) return profile;
+      final profile = _BleProfile(aquarium ? 'Aquarium' : 'AquaControl',
+          commands.single, statuses.single);
+      if (aquarium || service.uuid == svcUuid) return profile;
       matches.add(profile);
     }
     return matches.length == 1 ? matches.single : null;
   }
 
   static String _profileError(List<BluetoothService> services) {
-    for (final service in services.where((s) => s.uuid == svcUuid)) {
-      final commands = service.characteristics.where((c) => c.uuid == cmdUuid);
-      final statuses =
-          service.characteristics.where((c) => c.uuid == statusUuid);
+    for (final service in services
+        .where((s) => s.uuid == svcUuid || s.uuid == aquariumSvcUuid)) {
+      final aquarium = service.uuid == aquariumSvcUuid;
+      final commands = service.characteristics
+          .where((c) => c.uuid == (aquarium ? aquariumCmdUuid : cmdUuid));
+      final statuses = service.characteristics
+          .where((c) => c.uuid == (aquarium ? aquariumStatusUuid : statusUuid));
       if (commands.isEmpty) return '수조 서비스에 명령 쓰기 특성이 없습니다. 연결 진단을 확인해 주세요.';
       if (statuses.isEmpty) return '수조 서비스에 상태 알림 특성이 없습니다. 연결 진단을 확인해 주세요.';
       if (!commands.any(
@@ -233,20 +270,47 @@ class BleManager {
     _diagnostics += report.toString();
   }
 
-  // 여러 패킷으로 나뉜 상태 JSON을 줄바꿈 기준으로 조립.
+  // 줄바꿈 유무와 패킷 경계에 관계없이 JSON 객체 하나씩 조립한다.
   void _onChunk(List<int> value) {
+    if (_statusSample.length < 1024) {
+      _statusSample.addAll(value.take(1024 - _statusSample.length));
+    }
     for (final byte in value) {
-      if (byte == 10) {
-        if (_rxBuf.isNotEmpty) {
-          try {
-            onStatus?.call(utf8.decode(_rxBuf));
-          } catch (_) {}
-          _rxBuf.clear();
+      if (_rxBuf.isEmpty && byte != 123) continue; // 객체 시작 '{'
+      _rxBuf.add(byte);
+      if (_rxBuf.length > 8192) {
+        _resetFrame();
+        continue;
+      }
+      if (_inJsonString) {
+        if (_jsonEscaped) {
+          _jsonEscaped = false;
+        } else if (byte == 92) {
+          _jsonEscaped = true;
+        } else if (byte == 34) {
+          _inJsonString = false;
         }
-      } else {
-        _rxBuf.add(byte);
+      } else if (byte == 34) {
+        _inJsonString = true;
+      } else if (byte == 123 || byte == 91) {
+        _jsonDepth++;
+      } else if (byte == 125 || byte == 93) {
+        _jsonDepth--;
+        if (_jsonDepth == 0) {
+          try {
+            final json = utf8.decode(_rxBuf);
+            if (jsonDecode(json) is Map<String, dynamic>) onStatus?.call(json);
+          } catch (_) {}
+          _resetFrame();
+        }
       }
     }
+  }
+
+  void _resetFrame() {
+    _rxBuf.clear();
+    _jsonDepth = 0;
+    _inJsonString = _jsonEscaped = false;
   }
 
   Future<void> write(String command) async {
@@ -271,7 +335,7 @@ class BleManager {
     await _statusSub?.cancel();
     await _connSub?.cancel();
     _scanSub = _statusSub = _connSub = null;
-    _rxBuf.clear();
+    _resetFrame();
     try {
       if (FlutterBluePlus.isScanningNow) await FlutterBluePlus.stopScan();
     } catch (_) {}
@@ -283,7 +347,8 @@ class BleManager {
 }
 
 class _BleProfile {
+  final String name;
   final BluetoothCharacteristic command;
   final BluetoothCharacteristic status;
-  _BleProfile(this.command, this.status);
+  _BleProfile(this.name, this.command, this.status);
 }
