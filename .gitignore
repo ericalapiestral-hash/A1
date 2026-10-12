@@ -30,6 +30,7 @@ app/flutter_app/android/key.properties
 # APK 는 저장소에 넣지 않고 GitHub Releases 에 첨부합니다 (파일당 46MB)
 *.apk
 *.aab
+app/AquaControl*.zip
 
 # ===== Arduino / ESP32 빌드 산출물 =====
 _build/
