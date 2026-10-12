@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'aqua_api.dart';
 import 'control_tab.dart';
 import 'monitor_tab.dart';
@@ -130,6 +131,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // ---------------- 설정 시트 ----------------
 
+  void _openBleDiagnostics() {
+    final report = api.connectionDiagnostics;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('블루투스 연결 진단'),
+        content: SingleChildScrollView(
+          child: SelectableText(report, style: const TextStyle(fontSize: 12)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: report));
+              if (!ctx.mounted) return;
+              Navigator.pop(ctx);
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('연결 진단을 복사했습니다.')),
+              );
+            },
+            child: const Text('복사'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('닫기'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _connBtn(String label, ConnMode m, StateSetter setSheet) {
     final sel = api.mode == m;
     final text = Center(
@@ -211,6 +243,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 ? Neo.teal
                                 : Colors.red,
                             fontSize: 12)),
+                    if (api.connectionDiagnostics.isNotEmpty)
+                      TextButton.icon(
+                        onPressed: _openBleDiagnostics,
+                        icon: const Icon(Icons.info_outline, size: 17),
+                        label: const Text('연결 진단 보기 · 복사'),
+                      ),
                     const SizedBox(height: 12),
                     SizedBox(
                       width: double.infinity,
@@ -312,9 +350,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 8),
           Text(_updateMsg!,
               style: TextStyle(
-                  color: updater.stage == UpdateStage.failed
-                      ? Neo.warn
-                      : Neo.teal,
+                  color:
+                      updater.stage == UpdateStage.failed ? Neo.warn : Neo.teal,
                   fontSize: 11.5)),
         ],
         if (!kUpdateConfigured) ...[

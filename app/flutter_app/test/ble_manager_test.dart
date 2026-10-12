@@ -15,7 +15,10 @@ void main() {
 
   setUp(() {
     platform.reset();
-    ble = BleManager(scanTimeout: const Duration(milliseconds: 100));
+    ble = BleManager(
+      scanTimeout: const Duration(milliseconds: 100),
+      serviceRetryDelay: Duration.zero,
+    );
   });
   tearDown(() async => ble.disconnect());
 
@@ -49,6 +52,74 @@ void main() {
     expect(connected, isEmpty);
     expect(platform.disconnectCount, 1);
     await expectLater(ble.write('heaterMode=1'), throwsA(isA<StateError>()));
+    expect(platform.discoverCount, 2);
+    expect(ble.diagnostics, contains('서비스 재검색 (0개)'));
+  });
+
+  test('서비스 UUID가 달라도 같은 명령·상태 UUID 쌍이면 연결한다', () async {
+    platform.serviceUuid = Guid('4fafc201-1fb5-459e-8fcc-c5c9c331914b');
+    final connected = <bool>[];
+    ble.onConnection = connected.add;
+    await ble.connect();
+    expect(connected, [true]);
+    expect(platform.notifiedService, platform.serviceUuid);
+    expect(platform.discoverCount, 1);
+  });
+
+  test('첫 검색에서 누락된 서비스는 한 번 재검색한 뒤 연결한다', () async {
+    platform.missingOnFirstDiscovery = true;
+    final connected = <bool>[];
+    ble.onConnection = connected.add;
+    await ble.connect();
+    expect(platform.discoverCount, 2);
+    expect(connected, [true]);
+    expect(ble.diagnostics, contains('첫 서비스 검색 (0개)'));
+    expect(ble.diagnostics, contains('서비스 재검색 (1개)'));
+  });
+
+  test('다른 특성 UUID는 추측하지 않고 발견한 UUID·속성을 진단에 보존한다', () async {
+    platform.serviceUuid = Guid('4fafc201-1fb5-459e-8fcc-c5c9c331914b');
+    platform.commandUuid = Guid('beb5483e-36e1-4688-b7f5-ea07361b26a8');
+    final api = AquaApi(bleManager: ble);
+    await api.setMode(ConnMode.ble);
+    expect(api.state.connected, isFalse);
+    expect(api.connectionError, contains('제어 특성을 찾지 못했습니다'));
+    expect(
+        api.connectionDiagnostics, contains(platform.serviceUuid.toString()));
+    expect(
+        api.connectionDiagnostics, contains(platform.commandUuid.toString()));
+    expect(api.connectionDiagnostics, contains('[write]'));
+    expect(api.connectionDiagnostics, contains('[notify]'));
+    await api.setValue('heaterMode', 1);
+    expect(api.state.heaterMode, 2);
+    expect(platform.notifiedService, isNull);
+    api.dispose();
+  });
+
+  test('상태 특성 UUID가 있어도 알림 속성이 없으면 원인을 구분한다', () async {
+    platform.statusNotifiable = false;
+    await expectLater(
+      ble.connect(),
+      throwsA(predicate((e) => e.toString().contains('알림을 지원하지 않습니다'))),
+    );
+    expect(platform.notifiedService, isNull);
+    expect(platform.disconnectCount, 1);
+  });
+
+  test('서비스 재검색을 기다릴 때 데모로 전환하면 연결을 완료하지 않는다', () async {
+    platform.missingOnFirstDiscovery = true;
+    ble = BleManager(serviceRetryDelay: const Duration(milliseconds: 100));
+    final api = AquaApi(bleManager: ble);
+    final pending = api.setMode(ConnMode.ble);
+    await platform.discoveryStarted.future;
+    await api.setMode(ConnMode.demo);
+    await pending;
+    expect(api.state.connected, isFalse);
+    expect(api.connectionError, isNull);
+    expect(platform.discoverCount, 1);
+    expect(platform.notifiedService, isNull);
+    expect(platform.disconnectCount, 1);
+    api.dispose();
   });
 
   test('알림 구독 실패도 호출자에게 전달되고 다시 연결할 수 있다', () async {
@@ -106,20 +177,31 @@ final class FakeBlePlatform extends FlutterBluePlusPlatform {
   String advertisedName = 'Aquarium';
   String platformName = '';
   bool hasService = true;
+  bool missingOnFirstDiscovery = false;
+  bool statusNotifiable = true;
+  Guid serviceUuid = BleManager.svcUuid;
+  Guid commandUuid = BleManager.cmdUuid;
+  Guid? notifiedService;
   bool sendInitialStatus = false;
   Object? scanError, notifyError;
-  int connectCount = 0, disconnectCount = 0, sequence = 0;
-  late Completer<void> scanStarted;
+  int connectCount = 0, disconnectCount = 0, discoverCount = 0, sequence = 0;
+  late Completer<void> scanStarted, discoveryStarted;
 
   void reset() {
     advertisedName = 'Aquarium';
     platformName = '';
     hasService = true;
+    missingOnFirstDiscovery = false;
+    statusNotifiable = true;
+    serviceUuid = BleManager.svcUuid;
+    commandUuid = BleManager.cmdUuid;
+    notifiedService = null;
     sendInitialStatus = false;
     scanError = notifyError = null;
-    connectCount = disconnectCount = 0;
+    connectCount = disconnectCount = discoverCount = 0;
     sequence++;
     scanStarted = Completer<void>();
+    discoveryStarted = Completer<void>();
   }
 
   @override
@@ -186,7 +268,7 @@ final class FakeBlePlatform extends FlutterBluePlusPlatform {
       BmBluetoothCharacteristic(
         remoteId: id,
         primaryServiceUuid: null,
-        serviceUuid: BleManager.svcUuid,
+        serviceUuid: serviceUuid,
         characteristicUuid: uuid,
         instanceId: 0,
         descriptors: [],
@@ -195,7 +277,7 @@ final class FakeBlePlatform extends FlutterBluePlusPlatform {
           read: false,
           writeWithoutResponse: false,
           write: !notify,
-          notify: notify,
+          notify: notify && statusNotifiable,
           indicate: false,
           authenticatedSignedWrites: false,
           extendedProperties: false,
@@ -206,16 +288,17 @@ final class FakeBlePlatform extends FlutterBluePlusPlatform {
 
   @override
   Future<bool> discoverServices(BmDiscoverServicesRequest request) async {
+    discoverCount++;
     discoveries.add(BmDiscoverServicesResult(
       remoteId: request.remoteId,
-      services: hasService
+      services: hasService && !(missingOnFirstDiscovery && discoverCount == 1)
           ? [
               BmBluetoothService(
                 remoteId: request.remoteId,
                 primaryServiceUuid: null,
-                serviceUuid: BleManager.svcUuid,
+                serviceUuid: serviceUuid,
                 characteristics: [
-                  characteristic(request.remoteId, BleManager.cmdUuid),
+                  characteristic(request.remoteId, commandUuid),
                   characteristic(request.remoteId, BleManager.statusUuid,
                       notify: true),
                 ],
@@ -226,18 +309,20 @@ final class FakeBlePlatform extends FlutterBluePlusPlatform {
       errorCode: 0,
       errorString: '',
     ));
+    if (!discoveryStarted.isCompleted) discoveryStarted.complete();
     return true;
   }
 
   @override
   Future<bool> setNotifyValue(BmSetNotifyValueRequest request) async {
     if (notifyError != null) throw notifyError!;
+    notifiedService = request.serviceUuid;
     if (sendInitialStatus) {
       for (final part in ['{"temp":', '25}\n']) {
         values.add(BmCharacteristicData(
           remoteId: request.remoteId,
           primaryServiceUuid: null,
-          serviceUuid: BleManager.svcUuid,
+          serviceUuid: serviceUuid,
           characteristicUuid: BleManager.statusUuid,
           instanceId: 0,
           value: utf8.encode(part),

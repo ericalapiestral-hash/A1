@@ -50,6 +50,7 @@ class AquaApi extends ChangeNotifier {
   }
 
   bool get isDemo => mode == ConnMode.demo;
+  String get connectionDiagnostics => ble.diagnostics;
 
   void start() {
     _timer?.cancel();

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 /// B보드(ESP32)와 BLE로 통신. 서비스 UUID는 펌웨어와 동일해야 함.
@@ -11,7 +12,11 @@ class BleManager {
   static final Guid statusUuid = Guid('6e400003-b5a3-f393-e0a9-e50e24dcca9e');
 
   final Duration scanTimeout;
-  BleManager({this.scanTimeout = const Duration(seconds: 15)});
+  final Duration serviceRetryDelay;
+  BleManager({
+    this.scanTimeout = const Duration(seconds: 15),
+    this.serviceRetryDelay = const Duration(milliseconds: 600),
+  });
 
   void Function(String json)? onStatus;
   void Function(bool connected)? onConnection;
@@ -25,6 +30,9 @@ class BleManager {
   int _session = 0;
   bool _ready = false;
   final List<int> _rxBuf = [];
+  String _diagnostics = '';
+
+  String get diagnostics => _diagnostics;
 
   static bool matchesDevice(ScanResult result) =>
       deviceNames
@@ -49,6 +57,7 @@ class BleManager {
     return _enqueue(() async {
       await _cleanup();
       if (session != _session) return;
+      _diagnostics = '';
       try {
         onProgress?.call('블루투스 상태를 확인합니다.');
         if (!await FlutterBluePlus.isSupported) {
@@ -95,7 +104,10 @@ class BleManager {
         }
         if (session != _session || device == null) return;
         await _setup(device, session);
-      } catch (_) {
+      } catch (error) {
+        if (session == _session && _diagnostics.isNotEmpty) {
+          _diagnostics += '\n오류: $error';
+        }
         await _cleanup();
         if (session == _session) rethrow;
       }
@@ -118,22 +130,42 @@ class BleManager {
     await device.connect(timeout: const Duration(seconds: 12), mtu: null);
     if (session != _session) return;
     onProgress?.call('수조 제어 서비스를 확인합니다.');
-    final services = await device.discoverServices();
+    _diagnostics = 'AquaControl BLE 연결 진단\n'
+        '기기: ${device.platformName} (${device.remoteId})\n'
+        '앱 서비스: $svcUuid\n'
+        '명령 쓰기: $cmdUuid\n'
+        '상태 알림: $statusUuid\n';
+    var services = await device.discoverServices();
     if (session != _session) return;
-    BluetoothCharacteristic? status;
-    for (final service in services) {
-      if (service.uuid != svcUuid) continue;
-      for (final characteristic in service.characteristics) {
-        if (characteristic.uuid == statusUuid) status = characteristic;
-        if (characteristic.uuid == cmdUuid) _cmd = characteristic;
+    _recordServices(services, '첫 서비스 검색');
+    var profile = _resolveProfile(services);
+    if (profile == null) {
+      // 앱을 재설치해도 Android의 BLE 서비스 캐시는 남을 수 있다.
+      onProgress?.call('블루투스 서비스 목록을 새로 확인합니다.');
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+        try {
+          await device.clearGattCache();
+          _diagnostics += '\nAndroid 서비스 캐시 갱신 요청 완료\n';
+        } catch (error) {
+          // 지원하지 않는 OS에서도 서비스 재검색은 한 번 시도한다.
+          _diagnostics += '\nAndroid 서비스 캐시 갱신 불가: $error\n';
+        }
       }
+      if (session != _session) return;
+      await Future<void>.delayed(serviceRetryDelay);
+      if (session != _session) return;
+      services = await device.discoverServices();
+      if (session != _session) return;
+      _recordServices(services, '서비스 재검색');
+      profile = _resolveProfile(services);
     }
-    if (status == null ||
-        _cmd == null ||
-        !(status.properties.notify || status.properties.indicate) ||
-        !(_cmd!.properties.write || _cmd!.properties.writeWithoutResponse)) {
-      throw StateError('기기에 수조 제어 서비스가 없습니다. B보드 펌웨어를 확인해 주세요.');
+    if (profile == null) {
+      throw StateError(_profileError(services));
     }
+    final status = profile.status;
+    _cmd = profile.command;
+    _diagnostics += '\n사용 서비스: ${status.serviceUuid}\n';
+    onProgress?.call('센서 상태 알림을 등록합니다.');
     // 알림을 활성화하기 전에 구독하여 첫 패킷부터 받는다.
     _statusSub = status.onValueReceived.listen((value) {
       if (session == _session && device.isConnected) _onChunk(value);
@@ -143,6 +175,62 @@ class BleManager {
     if (!device.isConnected) throw StateError('설정 중 블루투스 연결이 끊겼습니다.');
     _ready = true;
     onConnection?.call(true);
+  }
+
+  // 펌웨어가 서비스 UUID만 바꾼 경우에도 알려진 명령/상태 UUID 쌍을
+  // 같은 서비스 안에서 확인한다. 임의의 쓰기 특성에는 명령을 보내지 않는다.
+  static _BleProfile? _resolveProfile(List<BluetoothService> services) {
+    final matches = <_BleProfile>[];
+    for (final service in services) {
+      final commands = service.characteristics.where((c) =>
+          c.uuid == cmdUuid &&
+          (c.properties.write || c.properties.writeWithoutResponse));
+      final statuses = service.characteristics.where((c) =>
+          c.uuid == statusUuid &&
+          (c.properties.notify || c.properties.indicate));
+      if (commands.length != 1 || statuses.length != 1) continue;
+      final profile = _BleProfile(commands.single, statuses.single);
+      if (service.uuid == svcUuid) return profile;
+      matches.add(profile);
+    }
+    return matches.length == 1 ? matches.single : null;
+  }
+
+  static String _profileError(List<BluetoothService> services) {
+    for (final service in services.where((s) => s.uuid == svcUuid)) {
+      final commands = service.characteristics.where((c) => c.uuid == cmdUuid);
+      final statuses =
+          service.characteristics.where((c) => c.uuid == statusUuid);
+      if (commands.isEmpty) return '수조 서비스에 명령 쓰기 특성이 없습니다. 연결 진단을 확인해 주세요.';
+      if (statuses.isEmpty) return '수조 서비스에 상태 알림 특성이 없습니다. 연결 진단을 확인해 주세요.';
+      if (!commands.any(
+          (c) => c.properties.write || c.properties.writeWithoutResponse)) {
+        return '수조 제어 특성이 쓰기를 지원하지 않습니다. 연결 진단을 확인해 주세요.';
+      }
+      if (!statuses.any((c) => c.properties.notify || c.properties.indicate)) {
+        return '수조 상태 특성이 알림을 지원하지 않습니다. 연결 진단을 확인해 주세요.';
+      }
+    }
+    return 'BLE 연결은 됐지만 앱과 맞는 수조 제어 특성을 찾지 못했습니다. 연결 진단을 확인해 주세요.';
+  }
+
+  void _recordServices(List<BluetoothService> services, String heading) {
+    final report = StringBuffer('\n$heading (${services.length}개)\n');
+    for (final service in services) {
+      report.writeln('서비스 ${service.uuid}');
+      for (final characteristic in service.characteristics) {
+        final p = characteristic.properties;
+        final flags = [
+          if (p.read) 'read',
+          if (p.write) 'write',
+          if (p.writeWithoutResponse) 'writeWithoutResponse',
+          if (p.notify) 'notify',
+          if (p.indicate) 'indicate',
+        ];
+        report.writeln('  특성 ${characteristic.uuid} [${flags.join(', ')}]');
+      }
+    }
+    _diagnostics += report.toString();
   }
 
   // 여러 패킷으로 나뉜 상태 JSON을 줄바꿈 기준으로 조립.
@@ -192,4 +280,10 @@ class BleManager {
     } catch (_) {}
     _device = null;
   }
+}
+
+class _BleProfile {
+  final BluetoothCharacteristic command;
+  final BluetoothCharacteristic status;
+  _BleProfile(this.command, this.status);
 }
