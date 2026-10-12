@@ -47,6 +47,7 @@ UP200_pump/build/
 *.ino.bootloader.bin
 
 # ===== 로컬 도구 설정 =====
+tools/board_diagnostics/diagnostics/
 .claude/settings.local.json
 
 # ===== IDE =====
