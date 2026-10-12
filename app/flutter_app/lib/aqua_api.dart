@@ -8,16 +8,31 @@ import 'ble_manager.dart';
 /// 연결 방식: 데모 / 블루투스(BLE)
 enum ConnMode { demo, ble }
 
+enum _ControlPhase { sending, waiting, confirmed, unconfirmed, failed }
+
+class _ControlRequest {
+  final num value;
+  final int startRevision;
+  _ControlPhase phase = _ControlPhase.sending;
+  String? error;
+  Timer? timer;
+  _ControlRequest(this.value, this.startRevision);
+}
+
 class AquaApi extends ChangeNotifier {
   ConnMode mode;
   final AquariumState state = AquariumState();
   final BleManager ble;
+  final Duration controlConfirmTimeout;
   bool connecting = false;
   String? connectionError;
   String connectionMessage = '';
   int _modeRequest = 0;
   bool _disposed = false;
   final List<double> tempHistory = [];
+  final Map<String, _ControlRequest> _controls = {};
+  Map<String, dynamic> _lastStatus = {};
+  int _statusRevision = 0;
 
   Timer? _timer;
   final Random _rng = Random();
@@ -26,12 +41,18 @@ class AquaApi extends ChangeNotifier {
   int _circSec = 0;
   bool _circPhaseOn = true;
 
-  AquaApi({this.mode = ConnMode.demo, BleManager? bleManager})
-      : ble = bleManager ?? BleManager() {
+  AquaApi({
+    this.mode = ConnMode.demo,
+    BleManager? bleManager,
+    this.controlConfirmTimeout = const Duration(seconds: 5),
+  }) : ble = bleManager ?? BleManager() {
     ble.onStatus = (j) {
       if (mode != ConnMode.ble) return;
       try {
-        state.applyJson(jsonDecode(j) as Map<String, dynamic>);
+        _lastStatus = jsonDecode(j) as Map<String, dynamic>;
+        _statusRevision++;
+        state.applyJson(_lastStatus);
+        _confirmControls();
         _pushHistory();
         notifyListeners();
       } catch (_) {}
@@ -52,7 +73,65 @@ class AquaApi extends ChangeNotifier {
   bool get isDemo => mode == ConnMode.demo;
   bool hasValue(String key) => isDemo || state.receivedFields.contains(key);
   bool get isAquariumProfile => mode == ConnMode.ble && ble.isAquariumProfile;
-  String get connectionDiagnostics => ble.diagnostics;
+  String get connectionDiagnostics =>
+      ble.diagnostics +
+      (_controls.isEmpty
+          ? ''
+          : '\n제어 요청 진단:\n${_controls.entries.map((e) => '${e.key}=${e.value.value}: ${controlFeedback(e.key)}').join('\n')}');
+
+  num controlValue(String key, num boardValue) {
+    final request = _controls[key];
+    return request != null && request.phase != _ControlPhase.confirmed
+        ? request.value
+        : boardValue;
+  }
+
+  int? controlMode(String key, int boardValue) {
+    final request = _controls[key];
+    if (request != null && request.phase != _ControlPhase.confirmed) {
+      return request.value.toInt();
+    }
+    return hasValue(key) ? boardValue : null;
+  }
+
+  String controlFeedback(String key) {
+    final request = _controls[key];
+    if (request == null) return hasValue(key) ? '보드 설정값' : '입력값 · 보드 설정 미수신';
+    switch (request.phase) {
+      case _ControlPhase.sending:
+        return '전송 중…';
+      case _ControlPhase.waiting:
+        return '전송됨 · 보드 설정값 확인 대기';
+      case _ControlPhase.confirmed:
+        return '보드 설정값 확인됨';
+      case _ControlPhase.unconfirmed:
+        return '전송됐지만 보드 적용 미확인';
+      case _ControlPhase.failed:
+        return '전송 실패: ${request.error}';
+    }
+  }
+
+  void _confirmControls() {
+    for (final entry in _controls.entries) {
+      final request = entry.value;
+      if ((request.phase == _ControlPhase.waiting ||
+              request.phase == _ControlPhase.unconfirmed) &&
+          _statusRevision > request.startRevision &&
+          _lastStatus[entry.key] is num &&
+          _lastStatus[entry.key] == request.value) {
+        request.phase = _ControlPhase.confirmed;
+        request.timer?.cancel();
+      }
+    }
+  }
+
+  void _clearControls() {
+    for (final request in _controls.values) {
+      request.timer?.cancel();
+    }
+    _controls.clear();
+    _lastStatus = {};
+  }
 
   void start() {
     _timer?.cancel();
@@ -64,6 +143,7 @@ class AquaApi extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _timer?.cancel();
+    _clearControls();
     ++_modeRequest;
     ble.onStatus = null;
     ble.onConnection = null;
@@ -90,16 +170,37 @@ class AquaApi extends ChangeNotifier {
     if (_disposed) return;
     final request = _modeRequest;
     if (mode == ConnMode.ble) {
+      _controls[key]?.timer?.cancel();
+      final control = _ControlRequest(value, _statusRevision);
+      _controls[key] = control;
+      notifyListeners();
       try {
         await ble.write('$key=$value');
-        if (_disposed || request != _modeRequest) return;
+        if (_disposed || request != _modeRequest || _controls[key] != control)
+          return;
+        control.phase = _ControlPhase.waiting;
+        _confirmControls();
+        if (control.phase != _ControlPhase.confirmed) {
+          control.timer = Timer(controlConfirmTimeout, () {
+            if (_disposed ||
+                request != _modeRequest ||
+                _controls[key] != control) return;
+            control.phase = _ControlPhase.unconfirmed;
+            notifyListeners();
+          });
+        }
         connectionError = null;
+        notifyListeners();
       } catch (error) {
-        if (_disposed || request != _modeRequest) return;
+        if (_disposed || request != _modeRequest || _controls[key] != control)
+          return;
+        control.phase = _ControlPhase.failed;
+        control.error = error.toString();
         connectionError = '명령을 보내지 못했습니다. $error';
         notifyListeners();
-        return;
       }
+      // BLE 쓰기 ACK는 명령 적용의 증거가 아니다. 실제 상태는 보드 수신값만 반영.
+      return;
     }
     state.applyControlKey(key, value);
     notifyListeners();
@@ -116,6 +217,7 @@ class AquaApi extends ChangeNotifier {
   Future<void> setMode(ConnMode m) async {
     final request = ++_modeRequest;
     mode = m;
+    _clearControls();
     state.receivedFields.clear();
     tempHistory.clear();
     state.connected = false;

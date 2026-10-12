@@ -65,7 +65,7 @@ PJ/
 
 ## 앱 설치 (처음 한 번만 — 이후엔 앱이 스스로 업데이트)
 
-**Aquarium 보드 호환 사전 릴리스 v1.3.4**: 실제 Aquarium UUID를 지원하고, 잘린 상태 JSON 복구와 수위 표시를 수정했습니다. `water_low:1`은 수위 부족으로 표시하며 보드가 보내지 않는 센서·설정값은 미수신으로 표시합니다. [APK 다운로드](https://raw.githubusercontent.com/ericalapiestral-hash/A1/main/app/AquaControl-v1.3.4.apk) · [ZIP 다운로드](https://raw.githubusercontent.com/ericalapiestral-hash/A1/main/app/AquaControl-v1.3.4.zip) · [변경 내용과 연결 진단](docs/bluetooth_status_v1.3.4.md). v1.3.1·v1.3.2·v1.3.3 위에 앱 삭제 없이 설치할 수 있습니다. v1.3.0은 서명키가 달라 기존 앱 삭제 후 설치해야 하며 로컬 데이터가 삭제됩니다. 아래 안정 릴리스 QR·자동 업데이트에는 이 사전 릴리스가 포함되지 않습니다. 실제 Aquarium의 제어 명령과 히터 출력은 아직 확인되지 않았습니다.
+**Aquarium 보드 호환 사전 릴리스 v1.3.5**: 센서 수신·수위 표시 수정에 이어, 제어 입력을 복구하고 명령 전송과 보드 설정 확인을 구분합니다. [APK 다운로드](https://raw.githubusercontent.com/ericalapiestral-hash/A1/main/app/AquaControl-v1.3.5.apk) · [ZIP 다운로드](https://raw.githubusercontent.com/ericalapiestral-hash/A1/main/app/AquaControl-v1.3.5.zip) · [변경 내용과 Windows 로그 확인](docs/bluetooth_control_v1.3.5.md). v1.3.1~v1.3.4 위에 앱 삭제 없이 설치할 수 있습니다. v1.3.0은 서명키가 달라 기존 앱 삭제 후 설치해야 하며 로컬 데이터가 삭제됩니다. 아래 안정 릴리스 QR·자동 업데이트에는 이 사전 릴리스가 포함되지 않습니다. **실제 Aquarium의 제어 명령 규격과 히터 출력은 아직 확인되지 않았습니다.**
 
 **방법 1 — QR 스캔 (가장 쉬움)**: 폰 카메라로 아래 QR을 찍으면 **항상 최신 APK** 가 받아집니다. 새 버전이 나와도 QR은 그대로입니다.
 

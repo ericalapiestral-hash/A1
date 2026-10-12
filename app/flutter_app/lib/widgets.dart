@@ -268,56 +268,32 @@ class SlidingSegment extends StatelessWidget {
     return NeoInset(
       radius: 15,
       padding: const EdgeInsets.all(5),
-      child: SizedBox(
-        height: 38,
-        child: LayoutBuilder(
-          builder: (context, c) {
-            final segW = c.maxWidth / labels.length;
-            return Stack(
-              children: [
-                if (index != null)
-                  AnimatedPositioned(
-                    duration: const Duration(milliseconds: 240),
-                    curve: Curves.easeOutCubic,
-                    left: index! * segW,
-                    top: 0,
-                    bottom: 0,
-                    width: segW,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 3),
-                      child: NeoBox(
-                        radius: 11,
-                        depth: 4,
-                        child: const SizedBox.expand(),
-                      ),
-                    ),
-                  ),
-                Row(
-                  children: List.generate(labels.length, (i) {
-                    final sel = i == index;
-                    return Expanded(
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () => onChanged(i),
-                        child: Center(
-                          child: AnimatedDefaultTextStyle(
-                            duration: const Duration(milliseconds: 200),
-                            style: TextStyle(
-                              fontFamily: sel ? Neo.display : Neo.body,
-                              color: sel ? Neo.teal : Neo.sub,
-                              fontSize: 12.5,
-                            ),
-                            child: Text(labels[i]),
-                          ),
-                        ),
-                      ),
-                    );
-                  }),
+      child: Row(
+        children: List.generate(labels.length, (i) {
+          final selected = i == index;
+          return Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 3),
+              child: TextButton(
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(0, 44),
+                  foregroundColor: selected ? Neo.teal : Neo.ink,
+                  backgroundColor: selected ? Neo.bg : Colors.transparent,
+                  side: BorderSide(color: selected ? Neo.teal : Neo.divider),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
                 ),
-              ],
-            );
-          },
-        ),
+                onPressed: () => onChanged(i),
+                child: Text(labels[i],
+                    style: TextStyle(
+                      fontFamily: selected ? Neo.display : Neo.body,
+                      fontSize: 12.5,
+                    )),
+              ),
+            ),
+          );
+        }),
       ),
     );
   }

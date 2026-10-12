@@ -56,7 +56,9 @@ void main() {
     expect(platform.lastWrite?.serviceUuid, BleManager.aquariumSvcUuid);
     expect(platform.lastWrite?.characteristicUuid, BleManager.aquariumCmdUuid);
     expect(utf8.decode(platform.lastWrite!.value), 'pump1Mode=0\n');
-    expect(api.state.pump1Mode, 0);
+    expect(api.state.pump1Mode, 2);
+    expect(api.controlMode('pump1Mode', api.state.pump1Mode), 0);
+    expect(api.controlFeedback('pump1Mode'), contains('확인 대기'));
     expect(api.connectionDiagnostics, contains('사용 구성: Aquarium'));
     expect(api.connectionDiagnostics, contains('수신 예시'));
     api.dispose();
@@ -168,8 +170,9 @@ void main() {
     expect(ble.diagnostics, contains('MTU 협상 실패'));
   });
 
-  testWidgets('Aquarium 실측값을 표시하고 미수신 센서·설정에 데모 값을 표시하지 않는다', (tester) async {
-    final api = AquaApi(bleManager: ImmediateAquariumBle());
+  testWidgets('Aquarium 센서 값과 미수신 표시를 유지하고 제어 입력·전송 피드백을 제공한다', (tester) async {
+    final uiBle = ImmediateAquariumBle();
+    final api = AquaApi(bleManager: uiBle);
     await api.setMode(ConnMode.ble);
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
@@ -182,13 +185,70 @@ void main() {
     expect(find.text('NTU'), findsNothing);
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
-      body: ControlTab(api: api, onSettings: () {}),
+      body: ListenableBuilder(
+          listenable: api,
+          builder: (context, _) => ControlTab(api: api, onSettings: () {})),
     )));
-    expect(find.text('주기 설정 미수신'), findsOneWidget);
-    expect(find.text('25.0'), findsNothing);
-    expect(find.text('5분'), findsNothing);
+    expect(find.text('25.0'), findsOneWidget);
+    expect(find.text('5분'), findsOneWidget);
+    expect(find.text('켜기'), findsNWidgets(3));
+    expect(find.text('끄기'), findsNWidgets(3));
+    expect(find.text('자동'), findsNWidgets(3));
+    await tester.tap(find.text('켜기').first);
+    await tester.pump();
+    expect(uiBle.commands, ['heaterMode=1']);
+    expect(find.text('전송됨 · 보드 설정값 확인 대기'), findsOneWidget);
+    expect(find.text('보드 OFF'), findsNWidgets(3));
+    await tester.pump(const Duration(seconds: 6));
+    expect(find.text('전송됐지만 보드 적용 미확인'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
+    api.dispose();
+  });
+
+  test('BLE 쓰기 ACK만으로 실제 모드를 변경하지 않고 보드 설정값을 기다린다', () async {
+    final api = AquaApi(bleManager: ble);
+    await api.setMode(ConnMode.ble);
+    await api.setValue('heaterMode', 1);
+    expect(api.state.heaterMode, 2);
+    expect(api.controlMode('heaterMode', api.state.heaterMode), 1);
+    expect(api.controlFeedback('heaterMode'), contains('확인 대기'));
+    platform.sendStatus(
+        platform.connectedId!, utf8.encode('{"heaterMode":1,"heaterOn":true}'));
+    await Future<void>.delayed(Duration.zero);
+    expect(api.state.heaterMode, 1);
+    expect(api.state.heaterOn, isTrue);
+    expect(api.controlFeedback('heaterMode'), '보드 설정값 확인됨');
+    expect(api.connectionDiagnostics, contains('heaterMode=1: 보드 설정값 확인됨'));
+    api.dispose();
+  });
+
+  test('명령 설정값을 돌려주지 않는 Aquarium은 전송과 적용 미확인을 구분한다', () async {
+    final uiBle = ImmediateAquariumBle();
+    final api = AquaApi(
+        bleManager: uiBle,
+        controlConfirmTimeout: const Duration(milliseconds: 20));
+    await api.setMode(ConnMode.ble);
+    await api.setValue('heaterMode', 1);
+    uiBle.onStatus?.call('{"ph":7.1,"ht":0}');
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    expect(api.state.heaterOn, isFalse);
+    expect(api.state.heaterMode, 2);
+    expect(api.controlFeedback('heaterMode'), contains('적용 미확인'));
+    expect(uiBle.commands, ['heaterMode=1']);
+    api.dispose();
+  });
+
+  test('모드 변경 뒤 이전 제어 요청의 타이머와 입력은 남지 않는다', () async {
+    final api = AquaApi(
+        bleManager: ImmediateAquariumBle(),
+        controlConfirmTimeout: const Duration(milliseconds: 20));
+    await api.setMode(ConnMode.ble);
+    await api.setValue('heaterMode', 1);
+    await api.setMode(ConnMode.demo);
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    expect(api.controlMode('heaterMode', api.state.heaterMode), 2);
+    expect(api.controlFeedback('heaterMode'), isNot(contains('미확인')));
     api.dispose();
   });
 
@@ -324,6 +384,7 @@ void main() {
 }
 
 final class ImmediateAquariumBle extends BleManager {
+  final List<String> commands = [];
   @override
   bool get isAquariumProfile => true;
 
@@ -336,6 +397,9 @@ final class ImmediateAquariumBle extends BleManager {
 
   @override
   Future<void> disconnect() async {}
+
+  @override
+  Future<void> write(String command) async => commands.add(command);
 }
 
 final class FakeBlePlatform extends FlutterBluePlusPlatform {
