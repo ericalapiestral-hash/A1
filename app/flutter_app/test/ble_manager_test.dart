@@ -3,6 +3,9 @@ import 'dart:convert';
 
 import 'package:aqua_control/aqua_api.dart';
 import 'package:aqua_control/ble_manager.dart';
+import 'package:aqua_control/control_tab.dart';
+import 'package:aqua_control/monitor_tab.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_blue_plus_platform_interface/flutter_blue_plus_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -102,6 +105,91 @@ void main() {
     expect(connected, [true]);
     expect(platform.disconnectCount, 0);
     expect(ble.diagnostics, contains('초기 상태 읽기 실패'));
+  });
+
+  test('실제 로그의 잘린 알림 두 개 이후 완전한 JSON으로 복구한다', () async {
+    platform.serviceUuid = BleManager.aquariumSvcUuid;
+    platform.commandUuid = BleManager.aquariumCmdUuid;
+    platform.statusUuid = BleManager.aquariumStatusUuid;
+    final api = AquaApi(bleManager: ble);
+    await api.setMode(ConnMode.ble);
+    for (final payload in [
+      '{"online":1,"ph":9.7',
+      '{"online":1,"ph":9.6',
+      '{"online":1,"ph":9.70,"turb":3.12,"water_low":1,"sup":0,"cir":0,"ht":0,"con":60,"cof":120,"son":10,"sof":60,"smode":0,"estop":0,"test":0,"test_rem":0}',
+    ]) {
+      platform.sendStatus(platform.connectedId!, utf8.encode(payload));
+    }
+    await Future<void>.delayed(Duration.zero);
+    expect(api.state.ph, 9.7);
+    expect(api.state.turb, 3.12);
+    expect(api.state.level, 0);
+    expect(api.hasValue('temp'), isFalse);
+    expect(api.hasValue('lux'), isFalse);
+    expect(api.tempHistory, isEmpty);
+    expect(api.connectionDiagnostics, contains('완전한 JSON: 1개'));
+    expect(api.connectionDiagnostics, contains('폐기한 메시지: 2개'));
+    api.dispose();
+  });
+
+  test('Aquarium은 알림을 켜기 전 MTU를 협상하고 초기 read를 처리한다', () async {
+    platform.serviceUuid = BleManager.aquariumSvcUuid;
+    platform.commandUuid = BleManager.aquariumCmdUuid;
+    platform.statusUuid = BleManager.aquariumStatusUuid;
+    platform.statusReadable = true;
+    int negotiations = 0;
+    ble = BleManager(negotiateMtu: (device) async {
+      negotiations++;
+      expect(platform.notifiedCharacteristic, isNull);
+      expect(platform.readCharacteristicId, isNull);
+      return 185;
+    });
+    final statuses = <String>[];
+    ble.onStatus = statuses.add;
+    await ble.connect();
+    expect(negotiations, 1);
+    expect(statuses, ['{"temp":24.5}']);
+    expect(ble.diagnostics, contains('협상 MTU: 185'));
+    expect(ble.diagnostics, contains('초기 read'));
+    expect(platform.notifiedCharacteristic, BleManager.aquariumStatusUuid);
+  });
+
+  test('MTU 협상 실패 시 초기 read·알림 연결을 계속하고 오류를 기록한다', () async {
+    platform.serviceUuid = BleManager.aquariumSvcUuid;
+    platform.commandUuid = BleManager.aquariumCmdUuid;
+    platform.statusUuid = BleManager.aquariumStatusUuid;
+    platform.statusReadable = true;
+    ble = BleManager(negotiateMtu: (_) async => throw StateError('MTU failed'));
+    final connected = <bool>[];
+    ble.onConnection = connected.add;
+    await ble.connect();
+    expect(connected, [true]);
+    expect(platform.readCharacteristicId, BleManager.aquariumStatusUuid);
+    expect(ble.diagnostics, contains('MTU 협상 실패'));
+  });
+
+  testWidgets('Aquarium 실측값을 표시하고 미수신 센서·설정에 데모 값을 표시하지 않는다', (tester) async {
+    final api = AquaApi(bleManager: ImmediateAquariumBle());
+    await api.setMode(ConnMode.ble);
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+      body: MonitorTab(api: api, onSettings: () {}),
+    )));
+    expect(find.text('9.70'), findsOneWidget);
+    expect(find.text('3.12'), findsOneWidget);
+    expect(find.text('부족'), findsOneWidget);
+    expect(find.text('--'), findsNWidgets(2));
+    expect(find.text('NTU'), findsNothing);
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+      body: ControlTab(api: api, onSettings: () {}),
+    )));
+    expect(find.text('주기 설정 미수신'), findsOneWidget);
+    expect(find.text('25.0'), findsNothing);
+    expect(find.text('5분'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    api.dispose();
   });
 
   test('다른 기기에는 연결하지 않고 검색 시간 초과를 전달한다', () async {
@@ -233,6 +321,21 @@ void main() {
     expect(api.connectionError, contains('명령을 보내지 못했습니다'));
     api.dispose();
   });
+}
+
+final class ImmediateAquariumBle extends BleManager {
+  @override
+  bool get isAquariumProfile => true;
+
+  @override
+  Future<void> connect() async {
+    onStatus?.call(
+        '{"ph":9.70,"turb":3.12,"water_low":1,"sup":0,"cir":0,"ht":0,"con":60,"cof":120}');
+    onConnection?.call(true);
+  }
+
+  @override
+  Future<void> disconnect() async {}
 }
 
 final class FakeBlePlatform extends FlutterBluePlusPlatform {

@@ -20,10 +20,19 @@ class BleManager {
 
   final Duration scanTimeout;
   final Duration serviceRetryDelay;
+  final Future<int> Function(BluetoothDevice) _negotiateMtu;
   BleManager({
     this.scanTimeout = const Duration(seconds: 15),
     this.serviceRetryDelay = const Duration(milliseconds: 600),
-  });
+    Future<int> Function(BluetoothDevice)? negotiateMtu,
+  }) : _negotiateMtu = negotiateMtu ?? _nativeMtu;
+
+  static Future<int> _nativeMtu(BluetoothDevice device) async {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      return device.requestMtu(512, timeout: 5);
+    }
+    return device.mtuNow;
+  }
 
   void Function(String json)? onStatus;
   void Function(bool connected)? onConnection;
@@ -37,17 +46,24 @@ class BleManager {
   int _session = 0;
   bool _ready = false;
   final List<int> _rxBuf = [];
-  final List<int> _statusSample = [];
+  final List<String> _statusSamples = [];
+  int _sampleBytes = 0, _packets = 0, _validFrames = 0, _discardedFrames = 0;
+  int _maxPacketSize = 0;
+  String _lastJson = '';
+  String? _profileName;
   int _jsonDepth = 0;
+  int? _lastSyntaxByte;
   bool _inJsonString = false, _jsonEscaped = false;
   String _diagnostics = '';
 
-  String get diagnostics =>
-      _diagnostics +
-      (_statusSample.isEmpty
-          ? ''
-          : '\n수신 예시 (최대 1024바이트):\n'
-              '${utf8.decode(_statusSample, allowMalformed: true)}');
+  bool get isAquariumProfile => _profileName == 'Aquarium';
+
+  String get diagnostics => _diagnostics.isEmpty
+      ? ''
+      : '$_diagnostics\n수신 패킷: $_packets개, 최대 $_maxPacketSize바이트\n'
+          '완전한 JSON: $_validFrames개, 폐기한 메시지: $_discardedFrames개\n'
+          '${_lastJson.isEmpty ? '' : '마지막 완전한 JSON:\n$_lastJson\n'}'
+          '${_statusSamples.isEmpty ? '' : '수신 예시 (원문 최대 1024바이트):\n${_statusSamples.join('\n')}'}';
 
   static bool matchesDevice(ScanResult result) =>
       deviceNames
@@ -73,7 +89,11 @@ class BleManager {
       await _cleanup();
       if (session != _session) return;
       _diagnostics = '';
-      _statusSample.clear();
+      _statusSamples.clear();
+      _sampleBytes = _packets = _validFrames = _discardedFrames = 0;
+      _maxPacketSize = 0;
+      _lastJson = '';
+      _profileName = null;
       try {
         onProgress?.call('블루투스 상태를 확인합니다.');
         if (!await FlutterBluePlus.isSupported) {
@@ -142,7 +162,7 @@ class BleManager {
         onConnection?.call(false);
       }
     });
-    // B보드는 20바이트 단위로 전송하므로 큰 MTU 협상 없이 연결한다.
+    // 서비스 확인 후 Aquarium에 필요한 MTU를 협상한다.
     await device.connect(timeout: const Duration(seconds: 12), mtu: null);
     if (session != _session) return;
     onProgress?.call('수조 제어 서비스를 확인합니다.');
@@ -182,11 +202,40 @@ class BleManager {
       throw StateError(_profileError(services));
     }
     final status = profile.status;
+    _profileName = profile.name;
     _cmd = profile.command;
     _diagnostics += '\n사용 구성: ${profile.name}\n'
         '사용 서비스: ${status.serviceUuid}\n'
         '사용 명령 쓰기: ${profile.command.uuid}\n'
         '사용 상태 알림: ${status.uuid}\n';
+    if (isAquariumProfile) {
+      onProgress?.call('센서 데이터 전송 크기를 맞춥니다.');
+      try {
+        final mtu = await _negotiateMtu(device);
+        if (session != _session) return;
+        _diagnostics += '협상 MTU: $mtu\n';
+      } catch (error) {
+        if (session != _session) return;
+        _diagnostics += 'MTU 협상 실패 (현재 ${device.mtuNow}): $error\n';
+      }
+    } else {
+      _diagnostics += '연결 MTU: ${device.mtuNow}\n';
+    }
+    if (session != _session) return;
+    if (!device.isConnected) throw StateError('전송 설정 중 블루투스 연결이 끊겼습니다.');
+    if (status.properties.read) {
+      onProgress?.call('초기 센서 상태를 읽습니다.');
+      try {
+        // 알림을 켜기 전에 읽어 read와 notify가 같은 버퍼에서 섞이지 않게 한다.
+        final initial = await status.read(timeout: 5);
+        if (session != _session) return;
+        _onChunk(initial, source: '초기 read');
+      } catch (error) {
+        if (session != _session) return;
+        _diagnostics += '\n초기 상태 읽기 실패: $error\n';
+      }
+    }
+    if (session != _session) return;
     onProgress?.call('센서 상태 알림을 등록합니다.');
     // 알림을 활성화하기 전에 구독하여 첫 패킷부터 받는다.
     _statusSub = status.onValueReceived.listen((value) {
@@ -197,15 +246,6 @@ class BleManager {
     if (!device.isConnected) throw StateError('설정 중 블루투스 연결이 끊겼습니다.');
     _ready = true;
     onConnection?.call(true);
-    if (status.properties.read) {
-      try {
-        // read 결과도 onValueReceived로 수신된다. 다음 notify 전 상태를 읽는다.
-        await status.read(timeout: 5);
-      } catch (error) {
-        // 초기 read 실패로 정상적인 notify 연결까지 해제하지 않는다.
-        if (session == _session) _diagnostics += '\n초기 상태 읽기 실패: $error\n';
-      }
-    }
   }
 
   // 펌웨어가 서비스 UUID만 바꾼 경우에도 알려진 명령/상태 UUID 쌍을
@@ -271,14 +311,30 @@ class BleManager {
   }
 
   // 줄바꿈 유무와 패킷 경계에 관계없이 JSON 객체 하나씩 조립한다.
-  void _onChunk(List<int> value) {
-    if (_statusSample.length < 1024) {
-      _statusSample.addAll(value.take(1024 - _statusSample.length));
+  void _onChunk(List<int> value, {String source = 'notify'}) {
+    if (value.isEmpty) return;
+    _packets++;
+    if (value.length > _maxPacketSize) _maxPacketSize = value.length;
+    if (_sampleBytes < 1024) {
+      final sample = value.take(1024 - _sampleBytes).toList();
+      _statusSamples.add('$source ${value.length}바이트: '
+          '${utf8.decode(sample, allowMalformed: true)}');
+      _sampleBytes += sample.length;
     }
     for (final byte in value) {
+      // 객체의 값 자리(':')가 아닌 곳에서 새 '{'가 오면 이전 메시지는
+      // 잘린 것이다. 실제 20바이트 알림 뒤의 새 상태 메시지로 복구한다.
+      if (byte == 123 &&
+          !_inJsonString &&
+          _jsonDepth == 1 &&
+          _lastSyntaxByte != 58) {
+        _discardedFrames++;
+        _resetFrame();
+      }
       if (_rxBuf.isEmpty && byte != 123) continue; // 객체 시작 '{'
       _rxBuf.add(byte);
       if (_rxBuf.length > 8192) {
+        _discardedFrames++;
         _resetFrame();
         continue;
       }
@@ -299,10 +355,19 @@ class BleManager {
         if (_jsonDepth == 0) {
           try {
             final json = utf8.decode(_rxBuf);
-            if (jsonDecode(json) is Map<String, dynamic>) onStatus?.call(json);
-          } catch (_) {}
+            if (jsonDecode(json) is Map<String, dynamic>) {
+              _validFrames++;
+              _lastJson = json;
+              onStatus?.call(json);
+            }
+          } catch (_) {
+            _discardedFrames++;
+          }
           _resetFrame();
         }
+      }
+      if (byte != 32 && byte != 9 && byte != 10 && byte != 13) {
+        _lastSyntaxByte = byte;
       }
     }
   }
@@ -310,6 +375,7 @@ class BleManager {
   void _resetFrame() {
     _rxBuf.clear();
     _jsonDepth = 0;
+    _lastSyntaxByte = null;
     _inJsonString = _jsonEscaped = false;
   }
 

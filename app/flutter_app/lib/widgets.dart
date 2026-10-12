@@ -47,9 +47,7 @@ class AquaHeader extends StatelessWidget {
               children: [
                 Text(title,
                     style: const TextStyle(
-                        fontFamily: Neo.display,
-                        fontSize: 26,
-                        color: Neo.ink)),
+                        fontFamily: Neo.display, fontSize: 26, color: Neo.ink)),
                 const SizedBox(height: 5),
                 Text(subtitle,
                     style: const TextStyle(fontSize: 12, color: Neo.sub)),
@@ -137,8 +135,8 @@ class CircularGauge extends StatelessWidget {
                       Padding(
                         padding: const EdgeInsets.only(left: 2),
                         child: Text(unit,
-                            style: const TextStyle(
-                                color: Neo.sub, fontSize: 12)),
+                            style:
+                                const TextStyle(color: Neo.sub, fontSize: 12)),
                       ),
                   ],
                 ),
@@ -234,10 +232,7 @@ class _SparkPainter extends CustomPainter {
         ..shader = LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [
-            color.withValues(alpha: 0.22),
-            color.withValues(alpha: 0.0)
-          ],
+          colors: [color.withValues(alpha: 0.22), color.withValues(alpha: 0.0)],
         ).createShader(Offset.zero & size),
     );
     canvas.drawPath(
@@ -257,7 +252,7 @@ class _SparkPainter extends CustomPainter {
 
 /// 눌린 트랙 위를 튀어나온 썸이 미끄러지는 세그먼트 (끄기/켜기/자동)
 class SlidingSegment extends StatelessWidget {
-  final int index;
+  final int? index;
   final List<String> labels;
   final ValueChanged<int> onChanged;
 
@@ -280,22 +275,23 @@ class SlidingSegment extends StatelessWidget {
             final segW = c.maxWidth / labels.length;
             return Stack(
               children: [
-                AnimatedPositioned(
-                  duration: const Duration(milliseconds: 240),
-                  curve: Curves.easeOutCubic,
-                  left: index * segW,
-                  top: 0,
-                  bottom: 0,
-                  width: segW,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 3),
-                    child: NeoBox(
-                      radius: 11,
-                      depth: 4,
-                      child: const SizedBox.expand(),
+                if (index != null)
+                  AnimatedPositioned(
+                    duration: const Duration(milliseconds: 240),
+                    curve: Curves.easeOutCubic,
+                    left: index! * segW,
+                    top: 0,
+                    bottom: 0,
+                    width: segW,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                      child: NeoBox(
+                        radius: 11,
+                        depth: 4,
+                        child: const SizedBox.expand(),
+                      ),
                     ),
                   ),
-                ),
                 Row(
                   children: List.generate(labels.length, (i) {
                     final sel = i == index;
@@ -402,8 +398,7 @@ class _TempInputState extends State<TempInput> {
             controller: _c,
             focusNode: _focus,
             textAlign: TextAlign.center,
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
             style: const TextStyle(
               fontFamily: Neo.display,
               color: Neo.teal,

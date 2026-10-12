@@ -36,12 +36,18 @@ class MonitorTab extends StatelessWidget {
                       child: _gaugeCard(
                         label: '수온',
                         gauge: CircularGauge(
-                          value: s.temp,
+                          value: api.hasValue('temp') ? s.temp : 15,
                           min: 15,
                           max: 35,
-                          display: s.temp.toStringAsFixed(1),
-                          unit: '℃',
-                          subtitle: '목표 ${s.tempSet.toStringAsFixed(1)}',
+                          display: api.hasValue('temp')
+                              ? s.temp.toStringAsFixed(1)
+                              : '--',
+                          unit: api.hasValue('temp') ? '℃' : '',
+                          subtitle: !api.hasValue('temp')
+                              ? '미수신'
+                              : api.hasValue('tempSet')
+                                  ? '목표 ${s.tempSet.toStringAsFixed(1)}'
+                                  : '목표값 미수신',
                           color: Neo.teal,
                         ),
                       ),
@@ -51,12 +57,14 @@ class MonitorTab extends StatelessWidget {
                       child: _gaugeCard(
                         label: 'pH 산성도',
                         gauge: CircularGauge(
-                          value: s.ph,
+                          value: api.hasValue('ph') ? s.ph : 0,
                           min: 0,
                           max: 14,
-                          display: s.ph.toStringAsFixed(2),
+                          display: api.hasValue('ph')
+                              ? s.ph.toStringAsFixed(2)
+                              : '--',
                           unit: '',
-                          subtitle: _phText(s.ph),
+                          subtitle: api.hasValue('ph') ? _phText(s.ph) : '미수신',
                           color: Neo.tealSoft,
                         ),
                       ),
@@ -108,12 +116,33 @@ class MonitorTab extends StatelessWidget {
       child: IntrinsicHeight(
         child: Row(
           children: [
-            _miniCell('탁도', s.turb.toStringAsFixed(0), 'NTU', Neo.ink),
+            _miniCell(
+                '탁도',
+                api.hasValue('turb')
+                    ? s.turb.toStringAsFixed(api.isAquariumProfile ? 2 : 0)
+                    : '--',
+                api.isAquariumProfile ? '' : 'NTU',
+                Neo.ink),
             _vDivider(),
-            _miniCell('조도', s.lux.toStringAsFixed(0), '%', Neo.ink),
+            _miniCell(
+                '조도',
+                api.hasValue('lux') ? s.lux.toStringAsFixed(0) : '--',
+                '%',
+                Neo.ink),
             _vDivider(),
-            _miniCell('수위', s.level == 1 ? '정상' : '부족', '',
-                s.level == 1 ? Neo.teal : Neo.warn),
+            _miniCell(
+                '수위',
+                !api.hasValue('level')
+                    ? '미수신'
+                    : s.level == 1
+                        ? '정상'
+                        : '부족',
+                '',
+                !api.hasValue('level')
+                    ? Neo.sub
+                    : s.level == 1
+                        ? Neo.teal
+                        : Neo.warn),
           ],
         ),
       ),
@@ -148,8 +177,7 @@ class MonitorTab extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(left: 3),
                     child: Text(unit,
-                        style:
-                            const TextStyle(fontSize: 10, color: Neo.sub)),
+                        style: const TextStyle(fontSize: 10, color: Neo.sub)),
                   ),
               ],
             ),
@@ -180,12 +208,16 @@ class MonitorTab extends StatelessWidget {
               const Spacer(),
               Text(rangeText,
                   style: const TextStyle(
-                      fontFamily: Neo.display,
-                      fontSize: 12,
-                      color: Neo.teal)),
+                      fontFamily: Neo.display, fontSize: 12, color: Neo.teal)),
             ],
           ),
           const SizedBox(height: 12),
+          if (!api.hasValue('temp'))
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: Text('수온 데이터를 아직 받지 못했습니다.',
+                  style: TextStyle(fontSize: 11, color: Neo.sub)),
+            ),
           NeoInset(
             radius: 16,
             padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),

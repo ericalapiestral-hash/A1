@@ -35,6 +35,11 @@ class ControlTab extends StatelessWidget {
                 _pump1Card(s),
                 const SizedBox(height: 18),
                 _pump2Card(context, s),
+                if (api.isAquariumProfile) ...[
+                  const SizedBox(height: 14),
+                  const Text('현재 보드의 제어 명령과 설정값은 아직 확인되지 않았습니다.',
+                      style: TextStyle(fontSize: 12, color: Neo.sub)),
+                ],
               ],
             ),
           ),
@@ -49,7 +54,7 @@ class ControlTab extends StatelessWidget {
     required IconData icon,
     required String title,
     required String subtitle,
-    required bool on,
+    required bool? on,
   }) {
     return Row(
       children: [
@@ -67,16 +72,21 @@ class ControlTab extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title,
-                  style: const TextStyle(fontSize: 15, color: Neo.ink)),
+              Text(title, style: const TextStyle(fontSize: 15, color: Neo.ink)),
               const SizedBox(height: 3),
               Text(subtitle,
                   style: const TextStyle(fontSize: 11, color: Neo.sub)),
             ],
           ),
         ),
-        Text(on ? '작동 중' : '대기',
-            style: TextStyle(fontSize: 12, color: on ? Neo.teal : Neo.sub)),
+        Text(
+            on == null
+                ? '미수신'
+                : on
+                    ? '작동 중'
+                    : '대기',
+            style: TextStyle(
+                fontSize: 12, color: on == true ? Neo.teal : Neo.sub)),
       ],
     );
   }
@@ -93,8 +103,8 @@ class ControlTab extends StatelessWidget {
           _deviceRow(
             icon: Icons.local_fire_department_outlined,
             title: '히터',
-            subtitle: '히스테리시스 ±0.5℃',
-            on: s.heaterOn,
+            subtitle: api.isAquariumProfile ? '보드 보고 상태' : '히스테리시스 ±0.5℃',
+            on: api.hasValue('heaterOn') ? s.heaterOn : null,
           ),
           const SizedBox(height: 13),
           NeoInset(
@@ -105,19 +115,24 @@ class ControlTab extends StatelessWidget {
                 const Text('목표 수온',
                     style: TextStyle(fontSize: 12, color: Neo.sub)),
                 const Spacer(),
-                TempInput(
-                  value: s.tempSet,
-                  onChanged: (v) => api.setValue('tempSet', v),
-                ),
+                if (api.hasValue('tempSet'))
+                  TempInput(
+                    value: s.tempSet,
+                    onChanged: (v) => api.setValue('tempSet', v),
+                  )
+                else
+                  const Text('미수신',
+                      style: TextStyle(color: Neo.sub, fontSize: 12)),
               ],
             ),
           ),
           const SizedBox(height: 13),
           SlidingSegment(
-            index: s.heaterMode,
+            index: api.hasValue('heaterMode') ? s.heaterMode : null,
             labels: const ['끄기', '켜기', '자동'],
             onChanged: (m) => api.setValue('heaterMode', m),
           ),
+          if (!api.hasValue('heaterMode')) _unknownMode(),
         ],
       ),
     );
@@ -135,15 +150,16 @@ class ControlTab extends StatelessWidget {
           _deviceRow(
             icon: Icons.water_drop_outlined,
             title: '급수 펌프',
-            subtitle: '수위 부족 시 자동 급수',
-            on: s.pump1On,
+            subtitle: api.isAquariumProfile ? '보드 보고 상태' : '수위 부족 시 자동 급수',
+            on: api.hasValue('pump1On') ? s.pump1On : null,
           ),
           const SizedBox(height: 13),
           SlidingSegment(
-            index: s.pump1Mode,
+            index: api.hasValue('pump1Mode') ? s.pump1Mode : null,
             labels: const ['끄기', '켜기', '자동'],
             onChanged: (m) => api.setValue('pump1Mode', m),
           ),
+          if (!api.hasValue('pump1Mode')) _unknownMode(),
         ],
       ),
     );
@@ -162,42 +178,54 @@ class ControlTab extends StatelessWidget {
             icon: Icons.sync,
             title: '순환 펌프',
             subtitle: '주기 반복 순환',
-            on: s.pump2On,
+            on: api.hasValue('pump2On') ? s.pump2On : null,
           ),
           const SizedBox(height: 13),
-          NeoInset(
-            radius: 16,
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: IntrinsicHeight(
-              child: Row(
-                children: [
-                  _cycleCell(context, '작동', s.circOn, Neo.teal,
-                      (v) => api.setValue('circOn', v)),
-                  Container(
-                    width: 1,
-                    margin: const EdgeInsets.symmetric(vertical: 4),
-                    color: Neo.divider,
-                  ),
-                  _cycleCell(context, '휴식', s.circOff, Neo.ink,
-                      (v) => api.setValue('circOff', v)),
-                ],
+          if (api.hasValue('circOn') && api.hasValue('circOff'))
+            NeoInset(
+              radius: 16,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: IntrinsicHeight(
+                child: Row(
+                  children: [
+                    _cycleCell(context, '작동', s.circOn, Neo.teal,
+                        (v) => api.setValue('circOn', v)),
+                    Container(
+                      width: 1,
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      color: Neo.divider,
+                    ),
+                    _cycleCell(context, '휴식', s.circOff, Neo.ink,
+                        (v) => api.setValue('circOff', v)),
+                  ],
+                ),
               ),
-            ),
-          ),
+            )
+          else
+            const Text('주기 설정 미수신',
+                style: TextStyle(fontSize: 12, color: Neo.sub)),
           const SizedBox(height: 8),
-          Text('${_fmtMin(s.circOn)} 켜고 → ${_fmtMin(s.circOff)} 끄기를 반복',
-              style: const TextStyle(fontSize: 11, color: Neo.sub),
-              textAlign: TextAlign.center),
+          if (api.hasValue('circOn') && api.hasValue('circOff'))
+            Text('${_fmtMin(s.circOn)} 켜고 → ${_fmtMin(s.circOff)} 끄기를 반복',
+                style: const TextStyle(fontSize: 11, color: Neo.sub),
+                textAlign: TextAlign.center),
           const SizedBox(height: 10),
           SlidingSegment(
-            index: s.pump2Mode,
+            index: api.hasValue('pump2Mode') ? s.pump2Mode : null,
             labels: const ['끄기', '켜기', '자동'],
             onChanged: (m) => api.setValue('pump2Mode', m),
           ),
+          if (!api.hasValue('pump2Mode')) _unknownMode(),
         ],
       ),
     );
   }
+
+  Widget _unknownMode() => const Padding(
+        padding: EdgeInsets.only(top: 8),
+        child: Text('모드값 미수신 · 선택해도 적용 여부는 확인이 필요합니다.',
+            style: TextStyle(fontSize: 11, color: Neo.sub)),
+      );
 
   Widget _cycleCell(BuildContext context, String label, int minutes,
       Color valueColor, ValueChanged<int> onChanged) {
@@ -304,8 +332,7 @@ class ControlTab extends StatelessWidget {
               Navigator.pop(ctx);
             },
             child: const Text('저장',
-                style: TextStyle(
-                    color: Neo.teal, fontWeight: FontWeight.w700)),
+                style: TextStyle(color: Neo.teal, fontWeight: FontWeight.w700)),
           ),
         ],
       ),

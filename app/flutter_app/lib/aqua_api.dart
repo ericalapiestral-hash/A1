@@ -50,6 +50,8 @@ class AquaApi extends ChangeNotifier {
   }
 
   bool get isDemo => mode == ConnMode.demo;
+  bool hasValue(String key) => isDemo || state.receivedFields.contains(key);
+  bool get isAquariumProfile => mode == ConnMode.ble && ble.isAquariumProfile;
   String get connectionDiagnostics => ble.diagnostics;
 
   void start() {
@@ -114,6 +116,8 @@ class AquaApi extends ChangeNotifier {
   Future<void> setMode(ConnMode m) async {
     final request = ++_modeRequest;
     mode = m;
+    state.receivedFields.clear();
+    tempHistory.clear();
     state.connected = false;
     connecting = m == ConnMode.ble;
     connectionError = null;
@@ -151,6 +155,7 @@ class AquaApi extends ChangeNotifier {
   }
 
   void _pushHistory() {
+    if (!hasValue('temp')) return;
     tempHistory.add(state.temp);
     if (tempHistory.length > 40) tempHistory.removeAt(0);
   }

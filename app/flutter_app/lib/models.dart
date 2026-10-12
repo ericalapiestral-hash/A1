@@ -28,6 +28,7 @@ class AquariumState {
   bool pump2On = false;
 
   bool connected = false; // 앱↔B보드 연결 상태
+  final Set<String> receivedFields = {};
 
   /// B보드 /status JSON 반영
   void applyJson(Map<String, dynamic> j) {
@@ -36,6 +37,13 @@ class AquariumState {
     turb = _d(j['turb'], turb);
     lux = _d(j['lux'], lux);
     level = _i(j['level'], level);
+    if (j['level'] is! num) {
+      final low = _flag(j['water_low']);
+      if (low != null) {
+        level = low ? 0 : 1;
+        receivedFields.add('level');
+      }
+    }
     heaterMode = _i(j['heaterMode'], heaterMode);
     oxygenMode = _i(j['oxygenMode'], oxygenMode);
     pump1Mode = _i(j['pump1Mode'], pump1Mode);
@@ -45,10 +53,35 @@ class AquariumState {
     oxyOff = _i(j['oxyOff'], oxyOff);
     circOn = _i(j['circOn'], circOn);
     circOff = _i(j['circOff'], circOff);
-    heaterOn = j['heaterOn'] ?? heaterOn;
-    oxygenOn = j['oxygenOn'] ?? oxygenOn;
-    pump1On = j['pump1On'] ?? pump1On;
-    pump2On = j['pump2On'] ?? pump2On;
+    for (final key in [
+      'temp',
+      'ph',
+      'turb',
+      'lux',
+      'level',
+      'heaterMode',
+      'oxygenMode',
+      'pump1Mode',
+      'pump2Mode',
+      'tempSet',
+      'oxyOn',
+      'oxyOff',
+      'circOn',
+      'circOff',
+    ]) {
+      if (j[key] is num) receivedFields.add(key);
+    }
+    void flag(String key, dynamic value, void Function(bool) assign) {
+      final parsed = _flag(value);
+      if (parsed == null) return;
+      assign(parsed);
+      receivedFields.add(key);
+    }
+
+    flag('heaterOn', j['heaterOn'] ?? j['ht'], (v) => heaterOn = v);
+    flag('oxygenOn', j['oxygenOn'], (v) => oxygenOn = v);
+    flag('pump1On', j['pump1On'] ?? j['sup'], (v) => pump1On = v);
+    flag('pump2On', j['pump2On'] ?? j['cir'], (v) => pump2On = v);
   }
 
   /// 화면에서 값을 바꿀 때 로컬 상태에 즉시 반영(낙관적 업데이트)
@@ -84,6 +117,12 @@ class AquariumState {
     }
   }
 
-  static double _d(dynamic v, double fb) => v == null ? fb : (v as num).toDouble();
-  static int _i(dynamic v, int fb) => v == null ? fb : (v as num).toInt();
+  static double _d(dynamic v, double fb) => v is num ? v.toDouble() : fb;
+  static int _i(dynamic v, int fb) => v is num ? v.toInt() : fb;
+  static bool? _flag(dynamic v) {
+    if (v is bool) return v;
+    if (v == 0) return false;
+    if (v == 1) return true;
+    return null;
+  }
 }
