@@ -11,7 +11,12 @@ enum ConnMode { demo, ble }
 class AquaApi extends ChangeNotifier {
   ConnMode mode;
   final AquariumState state = AquariumState();
-  final BleManager ble = BleManager();
+  final BleManager ble;
+  bool connecting = false;
+  String? connectionError;
+  String connectionMessage = '';
+  int _modeRequest = 0;
+  bool _disposed = false;
   final List<double> tempHistory = [];
 
   Timer? _timer;
@@ -21,17 +26,25 @@ class AquaApi extends ChangeNotifier {
   int _circSec = 0;
   bool _circPhaseOn = true;
 
-  AquaApi({this.mode = ConnMode.demo}) {
+  AquaApi({this.mode = ConnMode.demo, BleManager? bleManager})
+      : ble = bleManager ?? BleManager() {
     ble.onStatus = (j) {
+      if (mode != ConnMode.ble) return;
       try {
         state.applyJson(jsonDecode(j) as Map<String, dynamic>);
-        state.connected = true;
         _pushHistory();
         notifyListeners();
       } catch (_) {}
     };
     ble.onConnection = (c) {
+      if (mode != ConnMode.ble) return;
       state.connected = c;
+      connectionMessage = c ? '블루투스 연결됨' : '연결이 끊겼습니다. 다시 검색해 주세요.';
+      notifyListeners();
+    };
+    ble.onProgress = (message) {
+      if (mode != ConnMode.ble) return;
+      connectionMessage = message;
       notifyListeners();
     };
   }
@@ -46,7 +59,12 @@ class AquaApi extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _timer?.cancel();
+    ++_modeRequest;
+    ble.onStatus = null;
+    ble.onConnection = null;
+    ble.onProgress = null;
     ble.disconnect();
     super.dispose();
   }
@@ -66,6 +84,20 @@ class AquaApi extends ChangeNotifier {
   }
 
   Future<void> setValue(String key, num value) async {
+    if (_disposed) return;
+    final request = _modeRequest;
+    if (mode == ConnMode.ble) {
+      try {
+        await ble.write('$key=$value');
+        if (_disposed || request != _modeRequest) return;
+        connectionError = null;
+      } catch (error) {
+        if (_disposed || request != _modeRequest) return;
+        connectionError = '명령을 보내지 못했습니다. $error';
+        notifyListeners();
+        return;
+      }
+    }
     state.applyControlKey(key, value);
     notifyListeners();
     switch (mode) {
@@ -74,21 +106,47 @@ class AquaApi extends ChangeNotifier {
         notifyListeners();
         break;
       case ConnMode.ble:
-        await ble.write('$key=$value');
         break;
     }
   }
 
   Future<void> setMode(ConnMode m) async {
+    final request = ++_modeRequest;
     mode = m;
     state.connected = false;
-    if (m == ConnMode.ble) {
-      await ble.connect();
-    } else {
-      await ble.disconnect();
-    }
+    connecting = m == ConnMode.ble;
+    connectionError = null;
+    connectionMessage = connecting ? '블루투스 연결을 준비합니다.' : '';
     notifyListeners();
-    refresh();
+    try {
+      if (m == ConnMode.ble) {
+        await ble.connect();
+      } else {
+        await ble.disconnect();
+      }
+    } catch (error) {
+      if (request != _modeRequest) return;
+      state.connected = false;
+      connectionError = _connectionErrorMessage(error);
+    }
+    if (request != _modeRequest) return;
+    connecting = false;
+    notifyListeners();
+    await refresh();
+  }
+
+  static String _connectionErrorMessage(Object error) {
+    if (error is TimeoutException) {
+      return '검색 또는 연결 시간이 초과되었습니다. B보드 전원과 거리를 확인한 뒤 다시 검색해 주세요.';
+    }
+    final message = error.toString();
+    if (message.toLowerCase().contains('permission')) {
+      return '앱 설정에서 근처 기기 권한을 허용해 주세요. Android 11 이하는 위치 권한도 필요합니다.';
+    }
+    if (message.toLowerCase().contains('location')) {
+      return '휴대폰의 위치 기능을 켠 뒤 다시 검색해 주세요. Android 11 이하에서 필요합니다.';
+    }
+    return message.replaceFirst('Bad state: ', '');
   }
 
   void _pushHistory() {

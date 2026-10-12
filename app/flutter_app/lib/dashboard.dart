@@ -164,73 +164,86 @@ class _DashboardScreenState extends State<DashboardScreen> {
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheet) {
-          return Padding(
-            padding: EdgeInsets.fromLTRB(
-                20, 14, 20, MediaQuery.of(ctx).viewInsets.bottom + 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: 16),
-                    decoration: BoxDecoration(
-                        color: Neo.divider,
-                        borderRadius: BorderRadius.circular(2)),
-                  ),
-                ),
-                const Text('설정',
-                    style: TextStyle(
-                        fontFamily: Neo.display,
-                        color: Neo.ink,
-                        fontSize: 19)),
-                const SizedBox(height: 10),
-                const Text('연결 방식',
-                    style: TextStyle(color: Neo.sub, fontSize: 12)),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    _connBtn('데모', ConnMode.demo, setSheet),
-                    const SizedBox(width: 12),
-                    _connBtn('블루투스', ConnMode.ble, setSheet),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                if (api.mode == ConnMode.ble) ...[
-                  const Text('블루투스로 B보드(AquaControl)를 검색·연결합니다.',
-                      style: TextStyle(color: Neo.sub, fontSize: 12)),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      style: FilledButton.styleFrom(
-                          backgroundColor: Neo.teal,
-                          padding: const EdgeInsets.symmetric(vertical: 14)),
-                      onPressed: () => setSheet(() => api.setMode(ConnMode.ble)),
-                      child: const Text('다시 검색',
-                          style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700)),
+        builder: (ctx, setSheet) => ListenableBuilder(
+          listenable: api,
+          builder: (ctx, _) {
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                  20, 14, 20, MediaQuery.of(ctx).viewInsets.bottom + 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                          color: Neo.divider,
+                          borderRadius: BorderRadius.circular(2)),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  const Text('* 블루투스/위치 권한을 허용해야 검색됩니다.',
-                      style: TextStyle(color: Neo.sub, fontSize: 11)),
-                ] else ...[
-                  const Text('ESP32 없이 가상 데이터로 UI를 확인합니다.',
+                  const Text('설정',
+                      style: TextStyle(
+                          fontFamily: Neo.display,
+                          color: Neo.ink,
+                          fontSize: 19)),
+                  const SizedBox(height: 10),
+                  const Text('연결 방식',
                       style: TextStyle(color: Neo.sub, fontSize: 12)),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      _connBtn('데모', ConnMode.demo, setSheet),
+                      const SizedBox(width: 12),
+                      _connBtn('블루투스', ConnMode.ble, setSheet),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  if (api.mode == ConnMode.ble) ...[
+                    const Text('블루투스로 B보드(Aquarium / AquaControl)를 검색·연결합니다.',
+                        style: TextStyle(color: Neo.sub, fontSize: 12)),
+                    const SizedBox(height: 8),
+                    Text(api.connectionError ?? api.connectionMessage,
+                        style: TextStyle(
+                            color: api.connectionError == null
+                                ? Neo.teal
+                                : Colors.red,
+                            fontSize: 12)),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                            backgroundColor: Neo.teal,
+                            padding: const EdgeInsets.symmetric(vertical: 14)),
+                        onPressed: api.connecting
+                            ? null
+                            : () => api.setMode(ConnMode.ble),
+                        child: Text(api.connecting ? '연결 중…' : '다시 검색',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700)),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                        '* 근처 기기 권한을 허용해 주세요. Android 11 이하는 위치 권한과 위치 기능도 필요합니다.',
+                        style: TextStyle(color: Neo.sub, fontSize: 11)),
+                  ] else ...[
+                    const Text('ESP32 없이 가상 데이터로 UI를 확인합니다.',
+                        style: TextStyle(color: Neo.sub, fontSize: 12)),
+                  ],
+                  const SizedBox(height: 20),
+                  const Divider(color: Neo.divider, height: 1),
+                  const SizedBox(height: 16),
+                  _updateSection(ctx, setSheet),
                 ],
-                const SizedBox(height: 20),
-                const Divider(color: Neo.divider, height: 1),
-                const SizedBox(height: 16),
-                _updateSection(ctx, setSheet),
-              ],
-            ),
-          );
-        },
+              ),
+            );
+          },
+        ),
       ),
     ).whenComplete(() => _updateMsg = null);
   }

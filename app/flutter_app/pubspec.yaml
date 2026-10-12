@@ -17,6 +17,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_blue_plus_platform_interface: 7.0.0
 
 flutter:
   uses-material-design: true
