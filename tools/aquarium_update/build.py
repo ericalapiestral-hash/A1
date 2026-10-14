@@ -41,9 +41,11 @@ for name,source in [('VENDOR ESP',esp),('VENDOR MD5',(vendor/'spark-md5-3.0.2.js
     page=page.replace('/* '+name+' */',re.sub(r'</script',r'<\/script',source,flags=re.I))
 assert not re.search(r'/\* (VENDOR|MANIFEST|CORE|UI)',page)
 (root/'Aquarium-B-Circulation-Update.html').write_text(page)
-with ZipFile(root/'Aquarium-B-Circulation-Update-v1.0.zip','w',ZIP_DEFLATED) as z:
+with ZipFile(root/'Aquarium-B-Circulation-Update-v1.0.1.zip','w',ZIP_DEFLATED) as z:
     for name in ['Aquarium-B-Circulation-Update.html','README.txt']:z.write(root/name,name)
     for notice in sorted(vendor.iterdir()):
         if 'LICENSE' in notice.name:z.write(notice,'licenses/'+notice.name)
     z.write(vendor/'sources.json','licenses/sources.json')
+    for notice in sorted((root/'licenses').iterdir()):
+        z.write(notice,'licenses/firmware/'+notice.name)
 print('Built matched-backup updater, firmware template and licenses. No original backup or device MAC included.')

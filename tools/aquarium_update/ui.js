@@ -46,7 +46,7 @@ byId('start').addEventListener('click',async()=>{
   }
 });
 byId('save').addEventListener('click',()=>{
-  const report='\uFEFFAquaControl Aquarium B 업데이트 보고서 v1.0\n'+
+  const report='\uFEFFAquaControl Aquarium B 업데이트 보고서 v1.0.1\n'+
     `작성: ${new Date().toISOString()}\n상태: ${byId('phase').textContent}\n작업: ${byId('operation').value}\n`+
     `결과: ${JSON.stringify(result)}\n검증된 대상 기록: ${JSON.stringify(binding)}\n\n--- 진행 로그 ---\n${logText}`;
   const url=URL.createObjectURL(new Blob([report],{type:'text/plain;charset=utf-8'}));

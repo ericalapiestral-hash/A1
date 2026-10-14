@@ -2,7 +2,7 @@
   "backupSha256": "fa6ad0beadf2dae49b37f7a02ea9d80bf98490e1f4ca26a88ed47e71973b3a83",
   "originalAppSha256": "6804b8a7ba079fe4edb3b7114f238745395cf16561b3998dbfed0d457bcaf6dc",
   "originalAppMd5": "aeb514224a0840c71083660f035d3ef9",
-  "templateSha256": "999638aa0a40f43afaa260b061e8a6f8a42417b552300f9b5bd9adb6dfbd0a13",
-  "peerConfigOffset": 75432,
+  "templateSha256": "5cc3e840ea258f5955f4f8ea67d706cd66cb71b52ab1347d22b471c8e56294ef",
+  "peerConfigOffset": 75436,
   "originalPeerOffset": 153392
 }

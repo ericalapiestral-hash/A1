@@ -9,6 +9,7 @@
 #include <WiFi.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
+#include <driver/gpio.h>
 #include "Circulation.h"
 
 using namespace aquarium;
@@ -47,7 +48,7 @@ String statusJson() {
   packet=latestSensor;received=lastSensor;have=haveSensor;
   portEXIT_CRITICAL(&sensorLock);
   const bool online=have && uint32_t(millis()-received)<8000;
-  String j="{\"firmware\":\"Aquarium-circulation-1.0\",\"manualCirculationSupported\":true,\"circulationOnly\":true,";
+  String j="{\"firmware\":\"Aquarium-circulation-1.0.1\",\"manualCirculationSupported\":true,\"circulationOnly\":true,";
   j+="\"sensorOnline\":"+String(online?"true":"false")+",\"online\":"+String(online?1:0);
   j+=",\"ph\":"+(online?String(packet.ph,2):String("null"));
   j+=",\"turb\":"+(online?String(packet.turbVolts,3):String("null"))+",\"turbUnit\":\"V\"";
@@ -106,11 +107,14 @@ void updateLcd() {
 }
 void setup() {
   // Observed existing hardware runs when IO17 is HIGH. OFF is LOW here.
-  digitalWrite(CIR_PIN,LOW);pinMode(CIR_PIN,OUTPUT);
-  digitalWrite(16,HIGH);pinMode(16,OUTPUT);digitalWrite(18,HIGH);pinMode(18,OUTPUT);
+  // Arduino 3.x ignores digitalWrite before a pin is registered as GPIO.
+  // Set the hardware latch first, then enable output and assert the level.
+  gpio_set_level(GPIO_NUM_17,0);pinMode(CIR_PIN,OUTPUT);digitalWrite(CIR_PIN,LOW);
+  gpio_set_level(GPIO_NUM_16,1);pinMode(16,OUTPUT);digitalWrite(16,HIGH);
+  gpio_set_level(GPIO_NUM_18,1);pinMode(18,OUTPUT);digitalWrite(18,HIGH);
   pinMode(2,OUTPUT);digitalWrite(2,LOW);
   Serial.begin(115200);delay(300);
-  Serial.println("Aquarium circulation recovery 1.0: IO17, boot OFF, manual priority");
+  Serial.println("Aquarium circulation recovery 1.0.1: IO17, boot OFF, manual priority");
   for (size_t i=0;i<6;++i){allowedPeer[i]=peerConfig.mac[i];peerReady|=allowedPeer[i]!=0;}
   Serial.println(peerReady?"[ESP-NOW] original A sender filter configured":"[ESP-NOW] no configured A sender; use the matched-backup updater");
   lcd.begin(16,2);lcdLine(0,"Aquarium Circ v1");lcdLine(1,"Boot: OFF");

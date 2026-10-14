@@ -1,0 +1,18 @@
+Firmware source and rebuild instructions:
+https://github.com/ericalapiestral-hash/A1/tree/main/B_board_Aquarium
+Arduino-ESP32 3.3.2 (Arduino core LGPL-2.1-or-later; individual file notices apply):
+https://github.com/espressif/arduino-esp32/tree/3.3.2
+ESP-IDF 5.5 (Apache-2.0; component notices apply):
+https://github.com/espressif/esp-idf/tree/v5.5
+NimBLE-Arduino 2.5.1 (Apache-2.0; bundled notices included):
+https://github.com/h2zero/NimBLE-Arduino/tree/2.5.1
+LiquidCrystal 1.0.7 (LGPL-2.1-or-later):
+https://github.com/arduino-libraries/LiquidCrystal/tree/1.0.7
+
+Install the above Arduino core/libraries and compile from the repository root:
+arduino-cli compile --fqbn esp32:esp32:esp32:PartitionScheme=huge_app --output-dir _build/aquarium-circulation B_board_Aquarium
+
+The public template has an empty A sender filter. Package it using the original B backup locally:
+python3 tools/aquarium_update/build.py --firmware _build/aquarium-circulation/B_board_Aquarium.ino.bin --backup /path/to/original-B-backup.bin
+Use the generated browser updater to personalize and verify the image before installation.
+The original backup and sender address are not distributed.

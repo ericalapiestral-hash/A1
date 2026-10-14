@@ -1,4 +1,4 @@
-# Aquarium B 백업 분석과 순환 전용 복구 프로그램 v1.0
+# Aquarium B 백업 분석과 순환 전용 복구 프로그램 v1.0.1
 
 앱의 `pump2Mode=0`이 `[BLE CMD]` 로그에 찍혀도 펌프가 멈추지 않은 원인은 명령 규격 불일치였습니다. 실제 Aquarium BLE v2의 명령 콜백은 받은 문자열을 출력한 다음 첫 글자를 분기합니다. `pump2Mode=0/1/2`, `circOn=...`, `circOff=...`는 처리하지 않습니다. 순환은 자동 주기만 계산하며 개별 순환 수동 모드가 없습니다.
 
@@ -16,7 +16,7 @@
 | 다른 기존 명령 | H=히터 토글, S=급수 주기, E0/E1=펌프 정지 플래그, M0/M1=급수 모드, Rs/Rc/Rx=60초 출력 테스트/중지, F/f=LCD 메시지, U=비활성 OTA |
 | 출력 핀 | 급수 GPIO16, 순환 GPIO17, 히터 GPIO18 |
 | LCD | 16×2 병렬, RS13/E14/D4=27/D5=26/D6=25/D7=33. 생성자 `0x400d3c90`에서 확인 |
-| A 센서 패킷 | 12바이트: float pH, float 탁도 전압, uint8 수위 부족, padding 3바이트 |
+| A 센서 패킷 | 12바이트: float pH, float 탁도 전압, uint8 수위 부족. 마지막 3바이트는 수신 코드에서 사용하지 않음 |
 | 수신 필터 | 원래 A의 송신 MAC만 수신. 제공된 A 시리얼 보고서와 일치 확인 |
 | 센서 유효 시간 | 약 8초, ESP-NOW 채널1 |
 | 앱 파티션 | app0 `0x10000`, 3MB. NVS·SPIFFS·부트로더는 별도 영역 |
@@ -37,23 +37,28 @@
 
 ## Arduino IDE 없이 적용
 
-[업데이트 도구 ZIP](https://raw.githubusercontent.com/ericalapiestral-hash/A1/main/tools/aquarium_update/Aquarium-B-Circulation-Update-v1.0.zip)을 풀고 HTML을 Edge/Chrome에서 엽니다. 현재 앱 v1.3.7은 그대로 사용합니다.
+[업데이트 도구 ZIP](https://raw.githubusercontent.com/ericalapiestral-hash/A1/main/tools/aquarium_update/Aquarium-B-Circulation-Update-v1.0.1.zip)을 풀고 HTML을 Edge/Chrome에서 엽니다. 현재 앱 v1.3.7은 그대로 사용합니다.
 
 1. 순환펌프·히터 전원을 끄고 B를 PC에 USB로 연결합니다. 기존 로그/백업 도구의 시리얼 연결을 종료합니다.
 2. 저장해 둔 원본 4MB B BIN을 선택합니다. 파일 SHA-256·앱 이미지·파티션을 확인한 뒤 원래 A 송신 필터를 브라우저 안에서 새 프로그램에 복사합니다. 공개 템플릿은 장치 MAC이 비어 있습니다.
 3. 기본 업데이트 작업과 준비 확인을 선택한 뒤 B의 COM5를 선택합니다. 연결 보드가 원래 펌웨어·파티션·ESP32/4MB 구성과 맞는지 확인한 뒤 앱 영역에만 씁니다.
-4. 체크섬 검증 완료 후 앱을 Aquarium에 다시 연결합니다. 부팅 순환 OFF, 켜기·끄기, 자동 주기, 센서·LCD를 확인합니다. 앱 연결 진단에 `firmware: Aquarium-circulation-1.0`, `pump2Mode`, `pump2On`, `pin17`이 나오는지 확인합니다.
+4. 체크섬 검증 완료 후 앱을 Aquarium에 다시 연결합니다. 부팅 순환 OFF, 켜기·끄기, 자동 주기, 센서·LCD를 확인합니다. 앱 연결 진단에 `firmware: Aquarium-circulation-1.0.1`, `pump2Mode`, `pump2On`, `pin17`이 나오는지 확인합니다.
 5. 기록 중 실패하면 보고서를 저장합니다. 같은 화면에서 원본 복원을 선택할 수 있습니다. 복원을 위해 대상 식별 해시를 브라우저 안에 저장합니다. 브라우저가 저장을 제한하면 화면을 닫기 전에 복원합니다.
 
 이 도구는 펌웨어를 실제로 쓰므로 수동 로그 읽기·백업 도구와 다릅니다. `0x10000`의 앱 영역만 허용하고 전체 삭제·다른 영역 쓰기는 거부합니다. 부트로더·파티션·NVS·SPIFFS를 덮어쓰지 않습니다. 원본 복원은 기존 앱 프로그램을 되돌리는 것이며 기존 제어 문제도 돌아옵니다. 사용자 백업과 로그는 서버로 자동 전송하지 않습니다.
 
 ## 검증과 한계
 
-- Arduino CLI, ESP32 core 3.3.2, NimBLE-Arduino 2.5.1, LiquidCrystal 1.0.7, `esp32:esp32:esp32:PartitionScheme=huge_app` 컴파일 통과. 프로그램 1,144,007바이트, RAM 53,504바이트.
+- Arduino CLI, ESP32 core 3.3.2, NimBLE-Arduino 2.5.1, LiquidCrystal 1.0.7, `esp32:esp32:esp32:PartitionScheme=huge_app` 컴파일 통과. 프로그램 1,144,039바이트, RAM 53,504바이트.
 - C++ 순환 테스트: 부팅 OFF, 수동 OFF/ON의 타이머 독립성, AUTO 두 구간·큰 시간 이동·millis wrap, 비상 플래그, 초/분 변환, 잘못된 명령의 상태 미변경, 12바이트 센서와 비정상 값 거부.
 - 업데이트 코어 테스트 7개: ESP 이미지 검증·A 필터 개인화, 백업 불일치, 앱 영역 설치·복원, 다른 보드 거부, 중단 후 같은 대상 복원, 보안 설정·파티션 불일치 거부, 프로토콜 쓰기 범위 제한.
 - Linux Chromium secure localhost의 실제 배포 HTML과 실제 백업 데이터를 모의 로더로 검증: 사용자 파일 선택, 준비 확인, 앱 영역 설치·MD5 확인, 보고서 저장, 원본 복원, 다른 장치 쓰기 거부. 개인화 전 공개 템플릿에 원래 A MAC이 없고 개인화 후 이미지 체크섬·SHA-256이 맞는 것도 확인했습니다.
 
 이 작업 환경에서 실제 Windows USB 업로드·순환펌프 동작은 수행하지 않았습니다. 소스와 도구 검증을 마쳤으며 실제 설치·펌프·LCD·센서 동작 확인은 현장 단계입니다.
 
-배포 ZIP: 995,931바이트, SHA-256 `c04dcc5900deb2d7c7aa153403fe4061ff11109a7f7dfdf5afd8691ec7cdad93`. 공개 템플릿 SHA-256은 `999638aa0a40f43afaa260b061e8a6f8a42417b552300f9b5bd9adb6dfbd0a13`입니다.
+1.0 초안의 GPIO 초기화 순서를 최종 검증에서 수정했습니다. Arduino 3에서는 등록 전 digitalWrite가 무시될 수 있어, 1.0.1은 GPIO 출력 래치를 먼저 설정하고 pinMode 뒤 레벨을 다시 적용합니다. GPIO17 LOW 시작·GPIO16/18 기존 HIGH 수준을 확정합니다. 1.0 초안 릴리스는 내려두었습니다.
+
+## 배포 파일 확인값
+
+- `Aquarium-B-Circulation-Update-v1.0.1.zip`: 1,020,918바이트, SHA-256 `a889227760d6a2e5685a8810f69cdc71951a5cdafc686b19c9ce5b1d4e2b7239`
+- `firmware-template.bin`: 1,144,192바이트, SHA-256 `5cc3e840ea258f5955f4f8ea67d706cd66cb71b52ab1347d22b471c8e56294ef`

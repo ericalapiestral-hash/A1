@@ -1,4 +1,4 @@
-﻿Aquarium B 순환 제어 업데이트 v1.0
+﻿Aquarium B 순환 제어 업데이트 v1.0.1
 
 이 도구는 제공된 4MB Aquarium B 백업을 분석해 만든 순환 전용 새 프로그램을 적용합니다.
 원본 소스가 복원된 것은 아닙니다. 기존 코드의 GPIO17, LCD 13/14/27/26/25/33, 12바이트 A 센서 수신·송신 보드 필터·BLE UUID를 유지합니다.
@@ -23,3 +23,5 @@
 
 Arduino CLI 컴파일·순환 상태/파싱/센서 패킷 테스트와 모의 브라우저 업데이터로 검증합니다. 실제 Windows/ESP32 업로드·펌프 작동은 현장 확인 단계입니다.
 Espressif esptool-js 0.7.0·SparkMD5 3.0.2, ZIP 내 라이선스 참조.
+
+펌웨어 라이브러리·재빌드 방법·원본 출처는 licenses/firmware/SOURCES.txt와 동봉 라이선스를 참조합니다.
