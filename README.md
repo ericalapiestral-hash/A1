@@ -64,6 +64,8 @@ PJ/
 
 ## 앱 설치 (처음 한 번만 — 이후엔 앱이 스스로 업데이트)
 
+**실제 Aquarium B 순환 복구 프로그램 v1.0**: 백업 분석으로 현재 B는 `pump2Mode`를 무시하고 `C초/초` 주기만 지원하는 것을 확인했습니다. [순환 전용 업데이트 ZIP](https://raw.githubusercontent.com/ericalapiestral-hash/A1/main/tools/aquarium_update/Aquarium-B-Circulation-Update-v1.0.zip) · [새 B 소스](B_board_Aquarium/B_board_Aquarium.ino) · [분석·적용 방법·검증 범위](docs/aquarium_b_recovery_v1.0.md). 기존 앱 v1.3.7로 수동 끄기·켜기·자동을 처리하며 GPIO17과 기존 LCD·12바이트 A 센서 통신을 사용합니다. 급수·히터 출력은 이 복구 프로그램에서 사용하지 않습니다. 펌프·히터 전원을 끄고 원본 BIN을 준비해 B의 앱 영역만 업데이트합니다. 실제 설치와 펌프 동작 검증은 현장 확인 단계입니다.
+
 **사전 릴리스 v1.3.7**: Aquarium 순환펌프 ON/OFF가 실제 동작과 반대로 보이던 표시를 수정했습니다. 수온 제거와 히터 수동 제어 구성은 유지합니다. [APK](https://raw.githubusercontent.com/ericalapiestral-hash/A1/main/app/AquaControl-v1.3.7.apk) · [ZIP](https://raw.githubusercontent.com/ericalapiestral-hash/A1/main/app/AquaControl-v1.3.7.zip) · [변경 내용·남은 제어 확인](docs/circulation_status_v1.3.7.md). v1.3.1~v1.3.6 위에 삭제 없이 설치할 수 있습니다. B보드에서 명령 문자열이 출력되는 것은 확인했지만 수동 끄기에도 계속 도는 문제는 아직 해결되지 않았습니다. 실제 펌웨어를 업로드한 릴리스는 아닙니다. [v1.3.6 수온 제거 기록](docs/no_temperature_v1.3.6.md).
 
 **Arduino IDE 없는 PC 점검 프로그램 v1.2**: [프로그램 ZIP](https://raw.githubusercontent.com/ericalapiestral-hash/A1/main/tools/board_diagnostics/AquaControl-Board-Diagnostics-v1.2.zip)을 풀고 HTML을 Edge/Chrome에서 엽니다. 실행 파일·PowerShell 스크립트 없이 USB 로그·USB ID·센서/출력 보고 상태를 읽고 TXT로 저장합니다. [사용 방법과 검증 범위](tools/board_diagnostics/README.txt). 실제 Aquarium A의 문자 센서 로그도 해석하며 탁도 전압을 V로 표시합니다. [문자 로그 분석 기록](docs/board_diagnostics_v1.1.md). v1.2는 Aquarium 순환 JSON의 반대 표시도 수정합니다.

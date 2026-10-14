@@ -44,3 +44,5 @@ APK 릴리스 빌드·서명 검증을 통과했습니다. 패키지는 `com.exa
 - AquaControl-v1.3.7.zip: 24,624,764바이트, SHA-256 `10de9a6919cb09357779bbfd554e6772b6599f3c4774b7640c379061ea26ee8d`
 - AquaControl-Board-Diagnostics-v1.2.zip: 11,505바이트, SHA-256 `d2f40e1342a97b9172d0ea22ac101db310361e21a0347a344b46560ecfe46008`
 - AquaControl-Firmware-Backup-v1.0.zip: 129,416바이트, SHA-256 `5488badfe48648721d305c4ed5965ed07e1b8f2aab8cf19ac20cefa322cdec81`
+
+후속 백업 분석에서 실제 B가 `pump2Mode`를 처리하지 않고 개별 순환 수동 모드도 없는 것을 확인했습니다. 현재 배선에 맞춘 순환 전용 B 소스와 대상 검증 업데이트 도구를 준비했습니다. 앱 v1.3.7은 그대로 사용하며 실제 B 설치가 필요합니다. [분석과 복구 v1.0](aquarium_b_recovery_v1.0.md).
