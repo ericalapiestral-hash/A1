@@ -11,7 +11,7 @@ A보드(센서+LCD) ──ESP-NOW 채널1──▶ B보드 ──BLE(AquaControl
 ## 폴더 구조
 ```
 PJ/
-├─ A_board/A_board.ino        센서 측정 + 16x2 LCD + ESP-NOW 송신
+├─ A_board/A_board.ino        수온 없는 센서 4종 + 16x2 LCD + ESP-NOW 송신
 ├─ B_board/B_board.ino        ESP-NOW 수신 + BLE 서버 + 펌프·히터 제어
 ├─ UP200_pump/UP200_pump.ino  순환펌프(협신 UP200, 220V) 타이머 컨트롤러(독립 실행)
 ├─ app/
@@ -26,7 +26,6 @@ PJ/
 ## A보드 — 센서 + LCD (DevKitC 38핀 + GPIO 확장보드 / 브레드보드)
 | 부품 | 핀 | 전원 |
 |---|---|---|
-| DS18B20 수온 (4.7kΩ 풀업→3.3V) | IO4 | 3.3V 레일 |
 | GL5528 조도 (분압) | IO33 | 3.3V 레일 |
 | SEN0189 탁도 (분압+0.1uF) | IO32 | 5V 레일 |
 | PH4502C pH (분압+1uF) | IO34 | 5V 레일 |
@@ -34,7 +33,7 @@ PJ/
 | 16x2 LCD(병렬) | RS=13, E=14, D4=27, D5=16, D6=17, D7=18, V0=가변저항, RW=GND | 5V |
 
 - **배선 안정화**: 전원/GND를 레일(버스)로 데이지체인 정리 + 아날로그 노드마다 필터 커패시터. 자세히는 [docs/A_board_sensor_table.md](docs/A_board_sensor_table.md) / 배선도 [docs/A_board_wiring_v3.svg](docs/A_board_wiring_v3.svg) ([PNG](docs/A_board_wiring_v3.png)).
-- 수온·조도는 3.3V 레일 구동(신호 native 3.3V → 분압 불필요), 5V 센서는 분압(×0.67) 거쳐 ADC1로.
+- 조도는 3.3V 레일에서 구동합니다. 수온 센서와 IO4 DATA·4.7kΩ 풀업은 제거했습니다. 5V 센서 신호는 분압비·실측 최대 전압을 확인해야 합니다.
 - 2초마다 측정 → LCD 표시 + B보드로 ESP-NOW 전송
 - 수위: 물이 차면 1(정상), 빠지면 0(부족)
 - pH 음수 방지 0~14 클램프, 시리얼에 raw 전압 `(x.xxV)` 출력(보정용)
@@ -52,9 +51,9 @@ PJ/
 - **BLE 기기명 `AquaControl`** 로 광고 → 앱이 직접 검색·연결 (핫스팟/WiFi 없음)
 - `ESP-NOW(WiFi 라디오)` 수신과 `BLE` 송신을 **동시** 수행 → BLE는 RAM 가벼운 **NimBLE** 사용
 - BLE 특성: status(notify) 상태 JSON 푸시 / cmd(write) `key=value` 명령
-- 모드 0=끄기·1=켜기·2=자동. 자동: 히터=수온<목표, 펌프1=수위 낮을 때 급수, 펌프2=순환 주기
-- A보드 신호 15초 끊기면 히터 안전 OFF
-- 전원: ESP32=USB 5V / 펌프=각각 12V 어댑터 / 히터=잘린 220V 코드
+- 히터는 0=끄기·1=수동 켜기만 지원하고 부팅 기본 OFF입니다. 수온 센서가 없어 자동 온도 제어·목표 수온은 제거했습니다. 급수·순환은 0/1/2 모드를 유지합니다.
+- A보드 신호가 15초 끊기면 급수 AUTO는 OFF입니다. 히터는 수동 모드이며 통신 끊김만으로 자동 OFF된다고 보장하지 않습니다. 부팅 시 강제 출력 자가테스트는 제거했습니다.
+- 전원은 장치 명판·제어 연결표를 기준으로 확인합니다. 연결표는 급수 12V DC, UP200 순환·히터 220V AC를 설명합니다. 기존 일부 배선 이미지는 이전 구성입니다.
 
 ## 사용 순서
 1. Arduino IDE → Library Manager에서 **`NimBLE-Arduino`** 설치 (B보드용)
@@ -65,7 +64,11 @@ PJ/
 
 ## 앱 설치 (처음 한 번만 — 이후엔 앱이 스스로 업데이트)
 
-**Aquarium 보드 호환 사전 릴리스 v1.3.5**: 센서 수신·수위 표시 수정에 이어, 제어 입력을 복구하고 명령 전송과 보드 설정 확인을 구분합니다. [APK 다운로드](https://raw.githubusercontent.com/ericalapiestral-hash/A1/main/app/AquaControl-v1.3.5.apk) · [ZIP 다운로드](https://raw.githubusercontent.com/ericalapiestral-hash/A1/main/app/AquaControl-v1.3.5.zip) · [변경 내용과 Windows 로그 확인](docs/bluetooth_control_v1.3.5.md). v1.3.1~v1.3.4 위에 앱 삭제 없이 설치할 수 있습니다. v1.3.0은 서명키가 달라 기존 앱 삭제 후 설치해야 하며 로컬 데이터가 삭제됩니다. 아래 안정 릴리스 QR·자동 업데이트에는 이 사전 릴리스가 포함되지 않습니다. **실제 Aquarium의 제어 명령 규격과 히터 출력은 아직 확인되지 않았습니다.**
+**사전 릴리스 v1.3.6**: 수온 센서·목표 수온·수온 추이·히터 자동 모드를 제거했습니다. 히터 수동 제어는 유지합니다. [APK](https://raw.githubusercontent.com/ericalapiestral-hash/A1/main/app/AquaControl-v1.3.6.apk) · [ZIP](https://raw.githubusercontent.com/ericalapiestral-hash/A1/main/app/AquaControl-v1.3.6.zip) · [변경 내용](docs/no_temperature_v1.3.6.md). v1.3.1~v1.3.5 위에 삭제 없이 설치할 수 있습니다. 실제 Aquarium 명령 규격·출력은 여전히 확인이 필요하며, 소스 수정이 실제 보드 펌웨어를 자동 갱신하지는 않습니다.
+
+**Arduino IDE 없는 PC 점검 프로그램**: [프로그램 ZIP](https://raw.githubusercontent.com/ericalapiestral-hash/A1/main/tools/board_diagnostics/AquaControl-Board-Diagnostics-v1.0.zip)을 풀고 HTML을 Edge/Chrome에서 엽니다. 실행 파일·PowerShell 스크립트 없이 USB 로그·USB ID·센서/출력 보고 상태를 읽고 TXT로 저장합니다. [사용 방법과 검증 범위](tools/board_diagnostics/README.txt).
+
+**수온 제거 후 보드 패킷**: 새 A보드는 센서 4개를 16바이트로 송신합니다. 새 B보드는 16바이트 및 기존 20바이트 A보드 패킷을 수신하며 기존 수온 필드는 무시합니다. 저장소 A/B를 적용할 때는 **B를 먼저 갱신**합니다. 현재 LCD Aquarium은 저장소 펌웨어와 일치하지 않으므로 핀·현재 펌웨어 백업을 확인하기 전 덮어쓰지 마세요. 기존 배선 이미지·과거 릴리스 문서는 해당 버전의 기록이며 현재 수온 없는 구성과 다릅니다.
 
 **방법 1 — QR 스캔 (가장 쉬움)**: 폰 카메라로 아래 QR을 찍으면 **항상 최신 APK** 가 받아집니다. 새 버전이 나와도 QR은 그대로입니다.
 

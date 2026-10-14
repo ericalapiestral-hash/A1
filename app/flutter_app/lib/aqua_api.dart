@@ -29,14 +29,12 @@ class AquaApi extends ChangeNotifier {
   String connectionMessage = '';
   int _modeRequest = 0;
   bool _disposed = false;
-  final List<double> tempHistory = [];
   final Map<String, _ControlRequest> _controls = {};
   Map<String, dynamic> _lastStatus = {};
   int _statusRevision = 0;
 
   Timer? _timer;
   final Random _rng = Random();
-  double _t = 24.5;
   // 데모용 순환 타이머 시뮬레이션
   int _circSec = 0;
   bool _circPhaseOn = true;
@@ -53,7 +51,6 @@ class AquaApi extends ChangeNotifier {
         _statusRevision++;
         state.applyJson(_lastStatus);
         _confirmControls();
-        _pushHistory();
         notifyListeners();
       } catch (_) {}
     };
@@ -71,7 +68,10 @@ class AquaApi extends ChangeNotifier {
   }
 
   bool get isDemo => mode == ConnMode.demo;
-  bool hasValue(String key) => isDemo || state.receivedFields.contains(key);
+  bool hasValue(String key) =>
+      key != 'temp' &&
+      key != 'tempSet' &&
+      (isDemo || state.receivedFields.contains(key));
   bool get isAquariumProfile => mode == ConnMode.ble && ble.isAquariumProfile;
   String get connectionDiagnostics =>
       ble.diagnostics +
@@ -162,12 +162,16 @@ class AquaApi extends ChangeNotifier {
         // BLE는 알림(push)으로 상태가 들어오므로 폴링하지 않음
         break;
     }
-    _pushHistory();
     notifyListeners();
   }
 
   Future<void> setValue(String key, num value) async {
     if (_disposed) return;
+    if (key == 'tempSet' || (key == 'heaterMode' && value != 0 && value != 1)) {
+      connectionError = '수온 센서가 제거되어 목표 수온과 히터 자동 모드는 사용할 수 없습니다.';
+      notifyListeners();
+      return;
+    }
     final request = _modeRequest;
     if (mode == ConnMode.ble) {
       _controls[key]?.timer?.cancel();
@@ -219,7 +223,6 @@ class AquaApi extends ChangeNotifier {
     mode = m;
     _clearControls();
     state.receivedFields.clear();
-    tempHistory.clear();
     state.connected = false;
     connecting = m == ConnMode.ble;
     connectionError = null;
@@ -256,22 +259,8 @@ class AquaApi extends ChangeNotifier {
     return message.replaceFirst('Bad state: ', '');
   }
 
-  void _pushHistory() {
-    if (!hasValue('temp')) return;
-    tempHistory.add(state.temp);
-    if (tempHistory.length > 40) tempHistory.removeAt(0);
-  }
-
   // ---------------- 데모 시뮬레이션 ----------------
   void _simulate() {
-    _t += (_rng.nextDouble() - 0.5) * 0.2;
-    if (state.heaterOn) {
-      _t += 0.06;
-    } else {
-      _t -= 0.04;
-    }
-    _t = _t.clamp(20.0, 30.0);
-    state.temp = _t;
     state.ph = 7.0 + (_rng.nextDouble() - 0.5) * 0.3;
     state.turb = 8 + _rng.nextDouble() * 10;
     state.lux = 40 + _rng.nextDouble() * 45;
@@ -289,13 +278,7 @@ class AquaApi extends ChangeNotifier {
   }
 
   void _applyDemoControl() {
-    if (state.heaterMode == 1) {
-      state.heaterOn = true;
-    } else if (state.heaterMode == 0) {
-      state.heaterOn = false;
-    } else {
-      state.heaterOn = state.temp < state.tempSet;
-    }
+    state.heaterOn = state.heaterMode == 1;
     if (state.oxygenMode == 1) {
       state.oxygenOn = true;
     } else if (state.oxygenMode == 0) {

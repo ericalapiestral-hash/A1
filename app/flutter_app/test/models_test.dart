@@ -2,6 +2,17 @@ import 'package:aqua_control/models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('이전 보드가 보낸 수온은 무시하고 센서 null 수신은 미수신으로 되돌린다', () {
+    final state = AquariumState();
+    state.applyJson({'temp': 25, 'tempSet': 26, 'ph': 7.2, 'level': 1});
+    expect(state.receivedFields, isNot(contains('temp')));
+    expect(state.receivedFields, isNot(contains('tempSet')));
+    expect(state.receivedFields, contains('ph'));
+    state.applyJson({'ph': null, 'level': null});
+    expect(state.receivedFields, isNot(contains('ph')));
+    expect(state.receivedFields, isNot(contains('level')));
+  });
+
   test('Aquarium 수신값을 반영하고 없는 센서·단위 미확인 타이머는 실측으로 표시하지 않는다', () {
     final state = AquariumState();
     state.applyJson({
@@ -47,13 +58,12 @@ void main() {
       'pump1On': false,
       'pump2On': true
     });
-    expect(state.temp, 26.5);
+    expect(state.receivedFields, isNot(contains('temp')));
     expect(state.lux, 80);
     expect(state.circOn, 30);
     expect(state.heaterOn, isTrue);
     expect(state.pump1On, isFalse);
     expect(state.pump2On, isTrue);
-    expect(state.receivedFields,
-        containsAll(['temp', 'lux', 'circOn', 'heaterOn']));
+    expect(state.receivedFields, containsAll(['lux', 'circOn', 'heaterOn']));
   });
 }

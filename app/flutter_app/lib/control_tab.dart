@@ -20,7 +20,7 @@ class ControlTab extends StatelessWidget {
         children: [
           AquaHeader(
             title: '장치 제어',
-            subtitle: '히터 · 급수 · 순환 자동 관리',
+            subtitle: '히터 수동 · 급수 · 순환 제어',
             mode: api.mode,
             connected: s.connected,
             onSettings: onSettings,
@@ -108,33 +108,22 @@ class ControlTab extends StatelessWidget {
           _deviceRow(
             icon: Icons.local_fire_department_outlined,
             title: '히터',
-            subtitle: api.isAquariumProfile ? '보드 보고 상태' : '히스테리시스 ±0.5℃',
+            subtitle: '수온 센서 제거 · 수동 켜기/끄기',
             on: api.hasValue('heaterOn') ? s.heaterOn : null,
           ),
           const SizedBox(height: 13),
-          NeoInset(
-            radius: 16,
-            padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
-            child: Row(
-              children: [
-                const Text('목표 수온',
-                    style: TextStyle(fontSize: 12, color: Neo.sub)),
-                const Spacer(),
-                TempInput(
-                  value: api.controlValue('tempSet', s.tempSet).toDouble(),
-                  onChanged: (v) => api.setValue('tempSet', v),
-                ),
-              ],
-            ),
-          ),
-          _feedback('tempSet'),
-          const SizedBox(height: 13),
           SlidingSegment(
             index: api.controlMode('heaterMode', s.heaterMode),
-            labels: const ['끄기', '켜기', '자동'],
+            labels: const ['끄기', '켜기'],
             onChanged: (m) => api.setValue('heaterMode', m),
           ),
           _feedback('heaterMode'),
+          if (!api.isDemo && api.hasValue('heaterMode') && s.heaterMode == 2)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text('보드가 자동 모드를 보고합니다. 보드 펌웨어 설정을 확인해 주세요.',
+                  style: TextStyle(fontSize: 11, color: Neo.sub)),
+            ),
         ],
       ),
     );

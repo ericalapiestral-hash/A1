@@ -4,7 +4,7 @@ import 'models.dart';
 import 'neo.dart';
 import 'widgets.dart';
 
-/// 모니터링 탭 — 수온/pH 게이지 + 탁도·조도·수위 + 수온 추이
+/// 모니터링 탭 — pH 게이지 + 탁도·조도·수위 (수온 센서 제거)
 class MonitorTab extends StatelessWidget {
   final AquaApi api;
   final VoidCallback onSettings;
@@ -30,51 +30,21 @@ class MonitorTab extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: _gaugeCard(
-                        label: '수온',
-                        gauge: CircularGauge(
-                          value: api.hasValue('temp') ? s.temp : 15,
-                          min: 15,
-                          max: 35,
-                          display: api.hasValue('temp')
-                              ? s.temp.toStringAsFixed(1)
-                              : '--',
-                          unit: api.hasValue('temp') ? '℃' : '',
-                          subtitle: !api.hasValue('temp')
-                              ? '미수신'
-                              : api.hasValue('tempSet')
-                                  ? '목표 ${s.tempSet.toStringAsFixed(1)}'
-                                  : '목표값 미수신',
-                          color: Neo.teal,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 18),
-                    Expanded(
-                      child: _gaugeCard(
-                        label: 'pH 산성도',
-                        gauge: CircularGauge(
-                          value: api.hasValue('ph') ? s.ph : 0,
-                          min: 0,
-                          max: 14,
-                          display: api.hasValue('ph')
-                              ? s.ph.toStringAsFixed(2)
-                              : '--',
-                          unit: '',
-                          subtitle: api.hasValue('ph') ? _phText(s.ph) : '미수신',
-                          color: Neo.tealSoft,
-                        ),
-                      ),
-                    ),
-                  ],
+                _gaugeCard(
+                  label: 'pH 산성도',
+                  gauge: CircularGauge(
+                    value: api.hasValue('ph') ? s.ph : 0,
+                    min: 0,
+                    max: 14,
+                    display:
+                        api.hasValue('ph') ? s.ph.toStringAsFixed(2) : '--',
+                    unit: '',
+                    subtitle: api.hasValue('ph') ? _phText(s.ph) : '미수신',
+                    color: Neo.tealSoft,
+                  ),
                 ),
                 const SizedBox(height: 18),
                 _miniStats(s),
-                const SizedBox(height: 18),
-                _trendCard(),
               ],
             ),
           ),
@@ -183,50 +153,6 @@ class MonitorTab extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _trendCard() {
-    final h = api.tempHistory;
-    String rangeText = '';
-    if (h.length >= 2) {
-      final lo = h.reduce((a, b) => a < b ? a : b);
-      final hi = h.reduce((a, b) => a > b ? a : b);
-      rangeText = '${lo.toStringAsFixed(1)} ~ ${hi.toStringAsFixed(1)}℃';
-    }
-    return NeoBox(
-      radius: 24,
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              const Text('수온 추이',
-                  style: TextStyle(fontSize: 12, color: Neo.sub)),
-              const Spacer(),
-              Text(rangeText,
-                  style: const TextStyle(
-                      fontFamily: Neo.display, fontSize: 12, color: Neo.teal)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (!api.hasValue('temp'))
-            const Padding(
-              padding: EdgeInsets.only(bottom: 8),
-              child: Text('수온 데이터를 아직 받지 못했습니다.',
-                  style: TextStyle(fontSize: 11, color: Neo.sub)),
-            ),
-          NeoInset(
-            radius: 16,
-            padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
-            child: SizedBox(
-              height: 52,
-              child: Sparkline(values: h, color: Neo.teal),
-            ),
-          ),
-        ],
       ),
     );
   }

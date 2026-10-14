@@ -6,26 +6,24 @@
 //    아날로그 라인마다 필터 커패시터(0.1uF~1uF)로 ADC 노이즈 제거.
 //  전원 레일 2개:
 //    - 5V 레일  : 탁도(SEN0189) · pH(PH4502C) · 수위(XKC-Y25-V) · LCD
-//    - 3.3V 레일: 수온(DS18B20) · 조도(GL5528)  (신호가 native 3.3V라 분압 불필요)
+//    - 3.3V 레일: 조도(GL5528)
 //    - GND 레일 : 전 센서/분압/커패시터/ESP32 공통 1점
-//  핀(코드 = 실제 배선): DS18B20=IO4, 조도=IO33, 탁도=IO32, pH=IO34, 수위=IO35
+//  핀: 조도=IO33, 탁도=IO32, pH=IO34, 수위=IO35. IO4 수온 센서는 제거됨.
 //    (아날로그는 전부 ADC1 = IO32~39 → ESP-NOW(WiFi)와 충돌 없음)
 //  LCD: RS=IO13 E=IO14 D4=IO27 D5=IO16 D6=IO17 D7=IO18
 //  시리얼(115200)에 각 센서 raw값까지 찍어서 배선 문제를 바로 확인 가능
 // ===================================================================
-#include <OneWire.h>
-#include <DallasTemperature.h>
 #include <LiquidCrystal.h>
 #include <esp_now.h>
 #include <WiFi.h>
 #include "esp_wifi.h"
+#include "SensorPacket.h"
 
 // ▼ B보드 STA MAC
 uint8_t boardB_mac[] = {0x80, 0xF3, 0xDA, 0x5E, 0x5C, 0x7C};
 #define WIFI_CHANNEL 1
 
 // ===== 센서 핀 (확장보드 S 헤더에 꽂힘) =====
-#define PIN_DS18B20   4    // IO4   수온  (3.3V 레일, DATA-3.3V 4.7k 풀업)
 #define PIN_LDR       33   // IO33  조도  (3.3V 레일, 3.3V-LDR-IO33-10k-GND 분압)
 #define PIN_TURBIDITY 32   // IO32  탁도  (5V 레일, OUT-10k-IO32-20k-GND + 0.1uF)
 #define PIN_PH        34   // IO34  pH   (5V 레일, 입력전용, PO-10k-IO34-20k-GND + 1uF)
@@ -47,13 +45,7 @@ const float PH_NEUTRAL_V = 2.50;  // pH7 기준 전압
 const float PH_SLOPE     = 0.18;
 float pH_offset = 0.0;
 
-OneWire oneWire(PIN_DS18B20);
-DallasTemperature ds18b20(&oneWire);
-
-typedef struct {
-  float tempC; float lux; float turbidity; float ph; int waterLevel;
-} SensorData;
-SensorData data;
+SensorData data = {};
 
 esp_now_peer_info_t peerInfo;
 unsigned long lastRead = 0;
@@ -62,8 +54,6 @@ const unsigned long READ_INTERVAL = 2000;
 // 진단용 raw 보관
 int   rawLdr, rawTur, rawPh, rawLevel;
 float vTur, vPh;
-float lastValidTemp = 25.0;
-bool  dsOk = false;
 
 void onSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {}
 
@@ -84,22 +74,15 @@ void updateLcd() {
   static int page = 0;
   char l0[20], l1[20];
   switch (page) {
-    case 0: snprintf(l0,sizeof(l0),"Water Temp");  snprintf(l1,sizeof(l1), dsOk?"%.1f C":"-- (no sensor)", data.tempC); break;
-    case 1: snprintf(l0,sizeof(l0),"pH Level");     snprintf(l1,sizeof(l1),"%.2f", data.ph); break;
-    case 2: snprintf(l0,sizeof(l0),"Turbidity");    snprintf(l1,sizeof(l1),"%.0f NTU", data.turbidity); break;
-    case 3: snprintf(l0,sizeof(l0),"Light");        snprintf(l1,sizeof(l1),"%.0f %%", data.lux); break;
-    case 4: snprintf(l0,sizeof(l0),"Water Level");  snprintf(l1,sizeof(l1),"%s", data.waterLevel?"OK (full)":"LOW !"); break;
+    case 0: snprintf(l0,sizeof(l0),"pH Level");     snprintf(l1,sizeof(l1),"%.2f", data.ph); break;
+    case 1: snprintf(l0,sizeof(l0),"Turbidity");    snprintf(l1,sizeof(l1),"%.0f NTU", data.turbidity); break;
+    case 2: snprintf(l0,sizeof(l0),"Light");        snprintf(l1,sizeof(l1),"%.0f %%", data.lux); break;
+    case 3: snprintf(l0,sizeof(l0),"Water Level");  snprintf(l1,sizeof(l1),"%s", data.waterLevel?"OK (full)":"LOW !"); break;
   }
-  printLine(0,l0); printLine(1,l1); page=(page+1)%5;
+  printLine(0,l0); printLine(1,l1); page=(page+1)%4;
 }
 
 void readSensors() {
-  // 수온
-  ds18b20.requestTemperatures();
-  float t = ds18b20.getTempCByIndex(0);
-  if (t > -50 && t < 85) { lastValidTemp = t; dsOk = true; } else dsOk = false;
-  data.tempC = lastValidTemp;
-
   // 조도
   rawLdr = analogAvg(PIN_LDR);
   data.lux = (rawLdr / 4095.0) * 100.0;
@@ -123,12 +106,10 @@ void readSensors() {
 
 void bootDiag() {
   Serial.println("\n========== A보드 센서 진단 시작 ==========");
-  ds18b20.begin();
-  int n = ds18b20.getDeviceCount();
-  Serial.printf("DS18B20 발견: %d개  %s\n", n, n>0?"(OK)":"(데이터선/4.7k풀업/전원 확인!)");
+  Serial.println("수온 센서 사용 안 함 / 센서 패킷 v2 (16 bytes)");
   Serial.printf("초기 ADC raw -> 조도(D33):%d  탁도(D32):%d  pH(D34):%d  수위(D35):%d\n",
                 analogAvg(PIN_LDR), analogAvg(PIN_TURBIDITY), analogAvg(PIN_PH), digitalRead(PIN_LEVEL));
-  Serial.println("  * raw가 0이거나 4095(최대)면 = 그 센서 신호선이 안 닿음(floating)");
+  Serial.println("  * raw 끝값은 포화/배선 문제 가능성이 있으므로 실측과 함께 확인");
   Serial.println("==========================================\n");
 }
 
@@ -169,8 +150,6 @@ void loop() {
 
   // ── 센서별 진단 출력 (raw값으로 살았는지 바로 확인) ──
   Serial.println("------------------------------------------");
-  Serial.printf("수온  D4 : %s %.1f C\n",
-                dsOk ? "[OK]" : "[X 미연결/-127]", data.tempC);
   Serial.printf("조도  D33: raw %4d -> %.0f%%   %s\n",
                 rawLdr, data.lux, (rawLdr<10||rawLdr>4080)?"<-- floating 의심":"");
   Serial.printf("탁도  D32: raw %4d -> %.2fV -> %.0f NTU   %s\n",
@@ -178,4 +157,6 @@ void loop() {
   Serial.printf("pH    D34: raw %4d -> %.2fV -> pH %.2f   %s\n",
                 rawPh, vPh, data.ph, (rawPh<10||rawPh>4080)?"<-- floating 의심":"");
   Serial.printf("수위  D35: %d -> %s\n", rawLevel, data.waterLevel?"정상(물참)":"부족");
+  Serial.printf("{\"ph\":%.2f,\"turb\":%.0f,\"lux\":%.0f,\"level\":%ld,\"tempSensorEnabled\":false}\n",
+                data.ph, data.turbidity, data.lux, (long)data.waterLevel);
 }

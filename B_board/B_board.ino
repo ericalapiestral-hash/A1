@@ -1,10 +1,10 @@
 // ===================================================================
 //  ESP32 B보드 (BLE 전용) — ESP-NOW 수신 + 블루투스(BLE) 서버
 //  -----------------------------------------------------------------
-//  A보드 → (ESP-NOW, 채널1) → B보드 : 센서값(수온/조도/탁도/pH/수위)
+//  A보드 → (ESP-NOW, 채널1) → B보드 : 조도/탁도/pH/수위 (수온 제거)
 //  B보드 → BLE(기기명 "AquaControl") → 폰 앱 직접 연결
 //    status 특성(notify) : 상태 JSON 푸시
-//    cmd    특성(write)  : "key=value" 명령 수신 (heaterMode, tempSet ...)
+//    cmd    특성(write)  : "key=value" 명령 수신 (히터 수동 ON/OFF만 지원)
 //  -----------------------------------------------------------------
 //  하드웨어: ESP32 WROOM-32 + 3채널 릴레이 모듈 (LOW 트리거)
 //  배선 원칙(안정성): 릴레이 VCC/GND·ESP32를 공통 GND 버스로 1점 접지 +
@@ -18,6 +18,7 @@
 #include "esp_wifi.h"
 #include "esp_mac.h"
 #include <NimBLEDevice.h>
+#include "SensorPacket.h"
 
 #define WIFI_CHANNEL 1
 #define PIN_PUMP1  25   // 급수 (릴레이 CH1)
@@ -30,15 +31,14 @@ const bool RELAY_LOW_TRIG = true;   // 반대로 동작하면 false
 #define CMD_UUID    "6e400002-b5a3-f393-e0a9-e50e24dcca9e"  // 앱 → 보드 (write)
 #define STATUS_UUID "6e400003-b5a3-f393-e0a9-e50e24dcca9e"  // 보드 → 앱 (notify)
 
-// A보드와 동일 구조체
-typedef struct { float tempC; float lux; float turbidity; float ph; int waterLevel; } SensorData;
-SensorData sensor;
+SensorData sensor = {};
 unsigned long lastRecv = 0;
 bool haveData = false;
+bool legacySensorPacket = false;
 
 // 제어 상태 (앱이 cmd로 변경) — 0=끄기 1=켜기 2=자동
-int   heaterMode = 2, oxygenMode = 2, pump1Mode = 2, pump2Mode = 2;
-float tempSet = 25.0, tempHyst = 0.5;
+// 히터는 수온 센서 제거에 따라 0=OFF, 1=수동 ON만 허용. 부팅 기본 OFF.
+int   heaterMode = 0, oxygenMode = 2, pump1Mode = 2, pump2Mode = 2;
 int   oxyOn = 15, oxyOff = 15, circOn = 5, circOff = 25;
 
 bool heaterOn = false, oxygenOn = false, pump1On = false, pump2On = false;
@@ -63,11 +63,7 @@ void control() {
   if (oxyPhase  && oe >= (unsigned)oxyOn)  { oxyPhase = false; oxyTimer = millis(); }
   if (!oxyPhase && oe >= (unsigned)oxyOff) { oxyPhase = true;  oxyTimer = millis(); }
 
-  if (heaterMode == 2) {
-    if (!haveData)                              heaterOn = false;
-    else if (sensor.tempC < tempSet - tempHyst) heaterOn = true;
-    else if (sensor.tempC > tempSet + tempHyst) heaterOn = false;
-  } else heaterOn = (heaterMode == 1);
+  heaterOn = (heaterMode == 1);
 
   // 급수: 수위 부족(0)이면 급수, 적정 수위(1)로 올라오면 정지
   if (pump1Mode == 2) pump1On = haveData && sensor.waterLevel == 0;
@@ -88,16 +84,17 @@ String boolStr(bool b) { return b ? "true" : "false"; }
 
 String statusJson() {
   String j = "{";
-  j += "\"temp\":"  + String(sensor.tempC, 1) + ",";
-  j += "\"ph\":"    + String(sensor.ph, 2) + ",";
-  j += "\"turb\":"  + String(sensor.turbidity, 0) + ",";
-  j += "\"lux\":"   + String(sensor.lux, 0) + ",";
-  j += "\"level\":" + String(haveData ? sensor.waterLevel : 1) + ",";
+  j += "\"tempSensorEnabled\":false,\"heaterAutoSupported\":false,";
+  j += "\"sensorOnline\":" + boolStr(haveData) + ",";
+  j += "\"sensorProtocol\":" + String(legacySensorPacket ? 1 : 2) + ",";
+  j += "\"ph\":"    + (haveData ? String(sensor.ph, 2) : String("null")) + ",";
+  j += "\"turb\":"  + (haveData ? String(sensor.turbidity, 0) : String("null")) + ",";
+  j += "\"lux\":"   + (haveData ? String(sensor.lux, 0) : String("null")) + ",";
+  j += "\"level\":" + (haveData ? String(sensor.waterLevel) : String("null")) + ",";
   j += "\"heaterMode\":" + String(heaterMode) + ",";
   j += "\"oxygenMode\":" + String(oxygenMode) + ",";
   j += "\"pump1Mode\":"  + String(pump1Mode) + ",";
   j += "\"pump2Mode\":"  + String(pump2Mode) + ",";
-  j += "\"tempSet\":"    + String(tempSet, 1) + ",";
   j += "\"oxyOn\":"  + String(oxyOn) + ",";
   j += "\"oxyOff\":" + String(oxyOff) + ",";
   j += "\"circOn\":" + String(circOn) + ",";
@@ -111,11 +108,20 @@ String statusJson() {
 }
 
 void applyKey(const String& k, const String& v) {
-  if      (k == "heaterMode") heaterMode = v.toInt();
+  if (k == "heaterMode") {
+    if (v != "0" && v != "1") {
+      Serial.println("[명령 거부] 수온 센서가 없어 히터 자동 모드는 지원하지 않습니다.");
+      return;
+    }
+    heaterMode = v.toInt();
+  }
   else if (k == "oxygenMode") oxygenMode = v.toInt();
   else if (k == "pump1Mode")  pump1Mode  = v.toInt();
   else if (k == "pump2Mode")  pump2Mode  = v.toInt();
-  else if (k == "tempSet")    tempSet    = v.toFloat();
+  else if (k == "tempSet") {
+    Serial.println("[명령 거부] 수온 센서와 목표 수온 설정이 제거되었습니다.");
+    return;
+  }
   else if (k == "oxyOn")      oxyOn      = v.toInt();
   else if (k == "oxyOff")     oxyOff     = v.toInt();
   else if (k == "circOn")     circOn     = v.toInt();
@@ -146,8 +152,8 @@ class CmdCB : public NimBLECharacteristicCallbacks {
     if (eq > 0) {
       applyKey(v.substring(0, eq), v.substring(eq + 1));
       control();
-      Serial.printf("  적용됨 -> heaterMode:%d pump1:%d pump2:%d tempSet:%.1f circOn:%d circOff:%d\n",
-                    heaterMode, pump1Mode, pump2Mode, tempSet, circOn, circOff);
+      Serial.printf("  현재 설정 -> heaterMode:%d pump1:%d pump2:%d circOn:%d circOff:%d\n",
+                    heaterMode, pump1Mode, pump2Mode, circOn, circOff);
     }
   }
 };
@@ -162,8 +168,7 @@ class SrvCB : public NimBLEServerCallbacks {
 
 // ---------------- ESP-NOW ----------------
 void onRecv(const esp_now_recv_info_t *info, const uint8_t *incoming, int len) {
-  if (len == sizeof(SensorData)) {
-    memcpy(&sensor, incoming, sizeof(sensor));
+  if (len > 0 && decodeSensorPacket(incoming, (size_t)len, sensor, legacySensorPacket)) {
     lastRecv = millis();
     haveData = true;
   }
@@ -174,14 +179,8 @@ void setup() {
   pinMode(PIN_PUMP1, OUTPUT); pinMode(PIN_PUMP2, OUTPUT); pinMode(PIN_HEATER, OUTPUT);
   drive(PIN_PUMP1, false); drive(PIN_PUMP2, false); drive(PIN_HEATER, false);
 
-  // 부팅시 자가테스트: 펌프1→펌프2→히터 순서로 1초씩 ON (배선/릴레이 점검용)
-  Serial.println("[자가테스트] 펌프1(급수) ON 1초");
-  drive(PIN_PUMP1, true);  delay(1000); drive(PIN_PUMP1, false);
-  Serial.println("[자가테스트] 펌프2(순환) ON 1초");
-  drive(PIN_PUMP2, true);  delay(1000); drive(PIN_PUMP2, false);
-  Serial.println("[자가테스트] 히터 ON 1초");
-  drive(PIN_HEATER, true); delay(1000); drive(PIN_HEATER, false);
-  Serial.println("[자가테스트] 완료");
+  // 시리얼 포트를 열 때 재부팅될 수 있으므로 자동 출력 자가테스트는 하지 않음.
+  Serial.println("수온 센서 사용 안 함 / 히터 기본 OFF·수동 제어 / 자동 부팅 자가테스트 없음");
 
   // WiFi STA: ESP-NOW 수신 전용 (핫스팟/서버 없음)
   WiFi.mode(WIFI_STA);
@@ -216,7 +215,7 @@ void setup() {
 }
 
 void loop() {
-  if (millis() - lastRecv > 15000) haveData = false;  // A보드 끊기면 히터 안전 OFF
+  if (millis() - lastRecv > 15000) haveData = false;  // 급수 AUTO만 수신 유효성 사용
   control();
   static unsigned long t = 0, td = 0;
   if (millis() - t >= 1000) { t = millis(); notifyStatus(); }  // 1초마다 상태 푸시
@@ -229,6 +228,7 @@ void loop() {
       pump1On, pump2On, heaterOn,
       digitalRead(PIN_PUMP1), digitalRead(PIN_PUMP2), digitalRead(PIN_HEATER),
       sensor.waterLevel, haveData);
+    Serial.println(statusJson()); // PC 점검 프로그램이 센서/설정/보고 출력을 읽는 JSON
   }
   delay(20);
 }

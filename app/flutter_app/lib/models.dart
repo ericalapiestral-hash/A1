@@ -2,20 +2,18 @@
 /// B보드가 보내는 JSON과 1:1로 매핑된다.
 class AquariumState {
   // 센서값
-  double temp = 24.8; // 수온 ℃
   double ph = 7.1; // pH
   double turb = 10; // 탁도 NTU
   double lux = 60; // 조도 %
   int level = 1; // 수위 1=정상 0=부족
 
   // 장치 모드: 0=끄기, 1=켜기, 2=자동
-  int heaterMode = 2;
+  int heaterMode = 0; // 수온 센서 없음: OFF/수동 ON만 지원
   int oxygenMode = 2;
   int pump1Mode = 2;
   int pump2Mode = 2;
 
   // 설정값
-  double tempSet = 25.0; // 목표 수온
   int oxyOn = 15; // 산소 자동 ON(분)
   int oxyOff = 15; // 산소 자동 OFF(분)
   int circOn = 5; // 순환 자동 ON(분)
@@ -32,7 +30,9 @@ class AquariumState {
 
   /// B보드 /status JSON 반영
   void applyJson(Map<String, dynamic> j) {
-    temp = _d(j['temp'], temp);
+    for (final key in ['ph', 'turb', 'lux', 'level']) {
+      if (j.containsKey(key) && j[key] == null) receivedFields.remove(key);
+    }
     ph = _d(j['ph'], ph);
     turb = _d(j['turb'], turb);
     lux = _d(j['lux'], lux);
@@ -48,13 +48,11 @@ class AquariumState {
     oxygenMode = _i(j['oxygenMode'], oxygenMode);
     pump1Mode = _i(j['pump1Mode'], pump1Mode);
     pump2Mode = _i(j['pump2Mode'], pump2Mode);
-    tempSet = _d(j['tempSet'], tempSet);
     oxyOn = _i(j['oxyOn'], oxyOn);
     oxyOff = _i(j['oxyOff'], oxyOff);
     circOn = _i(j['circOn'], circOn);
     circOff = _i(j['circOff'], circOff);
     for (final key in [
-      'temp',
       'ph',
       'turb',
       'lux',
@@ -63,7 +61,6 @@ class AquariumState {
       'oxygenMode',
       'pump1Mode',
       'pump2Mode',
-      'tempSet',
       'oxyOn',
       'oxyOff',
       'circOn',
@@ -98,9 +95,6 @@ class AquariumState {
         break;
       case 'pump2Mode':
         pump2Mode = v.toInt();
-        break;
-      case 'tempSet':
-        tempSet = v.toDouble();
         break;
       case 'oxyOn':
         oxyOn = v.toInt();

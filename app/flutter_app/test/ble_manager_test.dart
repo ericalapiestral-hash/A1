@@ -48,7 +48,7 @@ void main() {
     final api = AquaApi(bleManager: ble);
     await api.setMode(ConnMode.ble);
     expect(api.state.connected, isTrue);
-    expect(api.state.temp, 24.5);
+    expect(api.hasValue('temp'), isFalse);
     expect(platform.discoverCount, 1);
     expect(platform.notifiedCharacteristic, BleManager.aquariumStatusUuid);
     expect(platform.readCharacteristicId, BleManager.aquariumStatusUuid);
@@ -128,7 +128,6 @@ void main() {
     expect(api.state.level, 0);
     expect(api.hasValue('temp'), isFalse);
     expect(api.hasValue('lux'), isFalse);
-    expect(api.tempHistory, isEmpty);
     expect(api.connectionDiagnostics, contains('완전한 JSON: 1개'));
     expect(api.connectionDiagnostics, contains('폐기한 메시지: 2개'));
     api.dispose();
@@ -181,7 +180,7 @@ void main() {
     expect(find.text('9.70'), findsOneWidget);
     expect(find.text('3.12'), findsOneWidget);
     expect(find.text('부족'), findsOneWidget);
-    expect(find.text('--'), findsNWidgets(2));
+    expect(find.text('--'), findsOneWidget);
     expect(find.text('NTU'), findsNothing);
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
@@ -189,11 +188,12 @@ void main() {
           listenable: api,
           builder: (context, _) => ControlTab(api: api, onSettings: () {})),
     )));
-    expect(find.text('25.0'), findsOneWidget);
+    expect(find.text('목표 수온'), findsNothing);
+    expect(find.text('25.0'), findsNothing);
     expect(find.text('5분'), findsOneWidget);
     expect(find.text('켜기'), findsNWidgets(3));
     expect(find.text('끄기'), findsNWidgets(3));
-    expect(find.text('자동'), findsNWidgets(3));
+    expect(find.text('자동'), findsNWidgets(2));
     await tester.tap(find.text('켜기').first);
     await tester.pump();
     expect(uiBle.commands, ['heaterMode=1']);
@@ -210,7 +210,7 @@ void main() {
     final api = AquaApi(bleManager: ble);
     await api.setMode(ConnMode.ble);
     await api.setValue('heaterMode', 1);
-    expect(api.state.heaterMode, 2);
+    expect(api.state.heaterMode, 0);
     expect(api.controlMode('heaterMode', api.state.heaterMode), 1);
     expect(api.controlFeedback('heaterMode'), contains('확인 대기'));
     platform.sendStatus(
@@ -233,7 +233,7 @@ void main() {
     uiBle.onStatus?.call('{"ph":7.1,"ht":0}');
     await Future<void>.delayed(const Duration(milliseconds: 40));
     expect(api.state.heaterOn, isFalse);
-    expect(api.state.heaterMode, 2);
+    expect(api.state.heaterMode, 0);
     expect(api.controlFeedback('heaterMode'), contains('적용 미확인'));
     expect(uiBle.commands, ['heaterMode=1']);
     api.dispose();
@@ -247,8 +247,20 @@ void main() {
     await api.setValue('heaterMode', 1);
     await api.setMode(ConnMode.demo);
     await Future<void>.delayed(const Duration(milliseconds: 40));
-    expect(api.controlMode('heaterMode', api.state.heaterMode), 2);
+    expect(api.controlMode('heaterMode', api.state.heaterMode), 0);
     expect(api.controlFeedback('heaterMode'), isNot(contains('미확인')));
+    api.dispose();
+  });
+
+  test('수온 설정과 히터 자동 요청을 보드에 전송하지 않는다', () async {
+    final uiBle = ImmediateAquariumBle();
+    final api = AquaApi(bleManager: uiBle);
+    await api.setMode(ConnMode.ble);
+    await api.setValue('tempSet', 25);
+    await api.setValue('heaterMode', 2);
+    expect(uiBle.commands, isEmpty);
+    expect(api.connectionError, contains('수온 센서가 제거'));
+    expect(api.hasValue('temp'), isFalse);
     api.dispose();
   });
 
@@ -306,7 +318,7 @@ void main() {
     expect(api.connectionDiagnostics, contains('[write]'));
     expect(api.connectionDiagnostics, contains('[notify]'));
     await api.setValue('heaterMode', 1);
-    expect(api.state.heaterMode, 2);
+    expect(api.state.heaterMode, 0);
     expect(platform.notifiedService, isNull);
     api.dispose();
   });
@@ -377,7 +389,7 @@ void main() {
     expect(api.connecting, isFalse);
     expect(api.connectionError, contains('근처 기기 권한'));
     await api.setValue('heaterMode', 1);
-    expect(api.state.heaterMode, 2);
+    expect(api.state.heaterMode, 0);
     expect(api.connectionError, contains('명령을 보내지 못했습니다'));
     api.dispose();
   });
