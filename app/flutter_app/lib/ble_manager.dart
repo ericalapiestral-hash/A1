@@ -209,6 +209,10 @@ class BleManager {
         '사용 명령 쓰기: ${profile.command.uuid}\n'
         '사용 상태 알림: ${status.uuid}\n';
     if (isAquariumProfile) {
+      _diagnostics += 'Aquarium 순환 상태 해석: cir=0 → ON, cir=1 → OFF\n'
+          'pump2On이 있으면 명시적 ON/OFF 값을 우선 사용합니다.\n';
+    }
+    if (isAquariumProfile) {
       onProgress?.call('센서 데이터 전송 크기를 맞춥니다.');
       try {
         final mtu = await _negotiateMtu(device);

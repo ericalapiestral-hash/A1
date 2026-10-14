@@ -66,4 +66,30 @@ void main() {
     expect(state.pump2On, isTrue);
     expect(state.receivedFields, containsAll(['lux', 'circOn', 'heaterOn']));
   });
+
+  test('Aquarium의 실제 순환 신호는 LOW일 때 ON이며 다른 출력은 반전하지 않는다', () {
+    final state = AquariumState();
+    state.applyJson({'cir': 0, 'sup': 0, 'ht': 0}, aquariumCirActiveLow: true);
+    expect(state.pump2On, isTrue);
+    expect(state.pump1On, isFalse);
+    expect(state.heaterOn, isFalse);
+    state.applyJson({'cir': 1}, aquariumCirActiveLow: true);
+    expect(state.pump2On, isFalse);
+    state.applyJson({'cir': 'invalid'}, aquariumCirActiveLow: true);
+    expect(state.pump2On, isFalse);
+    state.applyJson({'cir': false}, aquariumCirActiveLow: true);
+    expect(state.pump2On, isTrue);
+  });
+
+  test('명시적인 pump2On과 기존 AquaControl 상태는 Aquarium 극성 영향을 받지 않는다', () {
+    final state = AquariumState();
+    state.applyJson({'pump2On': true, 'cir': 1}, aquariumCirActiveLow: true);
+    expect(state.pump2On, isTrue);
+    state.applyJson({'pump2On': false, 'cir': 0}, aquariumCirActiveLow: true);
+    expect(state.pump2On, isFalse);
+    state.applyJson({'pump2On': true});
+    expect(state.pump2On, isTrue);
+    state.applyJson({'pump2On': false});
+    expect(state.pump2On, isFalse);
+  });
 }

@@ -100,11 +100,12 @@ async function disconnectPort() {
 }
 function report() {
   return '\uFEFFAquaControl 보드 점검 보고서\n'+
-    `점검 프로그램: v1.1\n작성: ${new Date().toISOString()}\n보드 선택(사용자 입력): ${byId('board').value}\nCOM 번호(사용자 입력): ${byId('com').value || '미입력'}\n`+
+    `점검 프로그램: v1.2\n작성: ${new Date().toISOString()}\n보드 선택(사용자 입력): ${byId('board').value}\nCOM 번호(사용자 입력): ${byId('com').value || '미입력'}\n`+
     `시리얼 장치: ${serialIdentity}\n별도 선택 USB 장치: ${usbIdentity}\n속도: ${byId('baud').value} baud\n상태: ${phase}\n`+
     `브라우저: ${navigator.userAgent}\nWeb Serial 지원: ${!!navigator.serial}\n보안 컨텍스트: ${isSecureContext}\n`+
     `수신 바이트: ${model.bytes}\n완전한 JSON: ${model.frames}\n폐기 JSON: ${model.discarded}\n문자 센서 상태 줄: ${model.sensorLines}\n`+
     '수온 표시·사용: 안 함 (실제 펌웨어의 센서 제거 여부는 미확인)\n보고된 센서/출력: '+JSON.stringify(model.values)+'\n로그상 단위: '+JSON.stringify(model.units)+'\n보고된 GPIO: '+JSON.stringify(model.pins)+'\n'+
+    'Aquarium 순환 신호 해석: cir=0 → ON, cir=1 → OFF. pump2On·문자 순환 값은 명시적 ON/OFF로 해석합니다.\n'+
     '보드 보고 상태는 실제 펌프 회전·히터 가열 확인과 다릅니다. 이 도구는 시리얼 읽기만 수행합니다.\n'+
     '\n--- 수신 로그 (최근 최대 262144 문자) ---\n'+model.text;
 }

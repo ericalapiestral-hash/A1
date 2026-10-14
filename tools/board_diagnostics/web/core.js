@@ -85,10 +85,16 @@ class DiagnosticBuffer {
     if (Object.hasOwn(j,'level') && j.level === null) this.values.level = null;
     else if (j.level === 0 || j.level === 1) this.values.level = j.level;
     else if (flag(j.water_low) !== null) this.values.level = flag(j.water_low) ? 0 : 1;
-    for (const [field, key, alias] of [['pump1','pump1On','sup'],['pump2','pump2On','cir'],['heater','heaterOn','ht']]) {
+    for (const [field, key, alias] of [['pump1','pump1On','sup'],['heater','heaterOn','ht']]) {
       const value = flag(j[key] ?? j[alias]);
       if (value !== null) this.values[field] = value;
     }
+    const circulation = flag(j.pump2On);
+    const aquariumCirculation = flag(j.cir);
+    // Observed Aquarium circulation signal is opposite to physical running state.
+    // Explicit pump2On and ASCII status lines retain their semantic ON/OFF values.
+    if (circulation !== null) this.values.pump2 = circulation;
+    else if (aquariumCirculation !== null) this.values.pump2 = !aquariumCirculation;
     if (j.sensorOnline === false) {
       for (const key of ['ph','turb','lux','level']) this.values[key] = null;
       for (const key of Object.keys(this.units)) this.units[key] = null;

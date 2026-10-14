@@ -56,7 +56,8 @@ try:
         download.value.save_as(output)
         report=output.read_text(encoding='utf-8-sig')
         assert 'COM5' in report and 'VID 10C4 / PID EA60' in report and '실제 펌웨어의 센서 제거 여부는 미확인' in report
-        assert '점검 프로그램: v1.1' in report
+        assert '점검 프로그램: v1.2' in report
+        assert page.locator('#pump2').inner_text()=='보드 ON'
         page.get_by_role('button',name='연결 종료',exact=True).click()
         page.wait_for_function("document.getElementById('phase').textContent==='연결 전'")
         calls=page.evaluate('portCalls')

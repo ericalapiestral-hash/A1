@@ -49,7 +49,8 @@ class AquaApi extends ChangeNotifier {
       try {
         _lastStatus = jsonDecode(j) as Map<String, dynamic>;
         _statusRevision++;
-        state.applyJson(_lastStatus);
+        state.applyJson(_lastStatus,
+            aquariumCirActiveLow: ble.isAquariumProfile);
         _confirmControls();
         notifyListeners();
       } catch (_) {}

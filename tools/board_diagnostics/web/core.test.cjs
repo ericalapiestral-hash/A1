@@ -11,7 +11,7 @@ test('fragmented UTF8, strings, nested objects and object arrays remain valid',(
 test('the actual truncated Aquarium prefixes recover at the next root JSON',()=>{
  const d=new DiagnosticBuffer();
  d.pushText('{"online":1,"ph":9.7{"online":1,"ph":9.6{"ph":9.70,"turb":3.12,"water_low":1,"ht":0,"sup":0,"cir":1}');
- assert.equal(d.frames,1);assert.equal(d.discarded,2);assert.equal(d.values.level,0);assert.equal(d.values.heater,false);assert.equal(d.values.pump2,true);
+ assert.equal(d.frames,1);assert.equal(d.discarded,2);assert.equal(d.values.level,0);assert.equal(d.values.heater,false);assert.equal(d.values.pump2,false);
 });
 test('serial output mode and pin levels are not confused with actual reported ON',()=>{
  const d=new DiagnosticBuffer();d.pushText('[상태] mode P1:2 P2:2 H:1 | on P1:0 P2:1 H:1 | pin25:1 pin26:0 pin27:0 | lvl:0 haveData:1\n');
@@ -64,4 +64,14 @@ test('units follow explicit ASCII labels and are cleared for bare JSON or a new 
  d.pushText('\n탁도  D32: raw 2000 -> 2.42V -> 3000 NTU\n조도  D33: raw 2000 -> 49%\n');
  assert.equal(d.units.turb,'NTU');assert.equal(d.values.turb,3000);assert.equal(d.units.lux,'%');
  d.beginSession();assert.equal(d.units.turb,null);assert.equal(d.units.lux,null);assert.equal(d.values.turb,null);
+});
+test('Aquarium circulation JSON uses the observed inverse signal while explicit output and ASCII remain semantic',()=>{
+ const d=new DiagnosticBuffer();
+ d.pushText('{"cir":0,"sup":0,"ht":0}');
+ assert.equal(d.values.pump2,true);assert.equal(d.values.pump1,false);assert.equal(d.values.heater,false);
+ d.pushText('{"cir":1}');assert.equal(d.values.pump2,false);
+ d.pushText('{"pump2On":true,"cir":1}');assert.equal(d.values.pump2,true);
+ d.pushText('{"pump2On":false,"cir":0}');assert.equal(d.values.pump2,false);
+ d.pushText('\npH=9.65(1.174V) | 탁도=3.118V | 수위낮음=1 | 급수=1 | 순환=1\n');
+ assert.equal(d.values.pump2,true);
 });

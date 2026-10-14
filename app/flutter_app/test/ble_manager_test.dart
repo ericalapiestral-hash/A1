@@ -198,7 +198,8 @@ void main() {
     await tester.pump();
     expect(uiBle.commands, ['heaterMode=1']);
     expect(find.text('전송됨 · 보드 설정값 확인 대기'), findsOneWidget);
-    expect(find.text('보드 OFF'), findsNWidgets(3));
+    expect(find.text('보드 OFF'), findsNWidgets(2));
+    expect(find.text('보드 ON'), findsOneWidget);
     await tester.pump(const Duration(seconds: 6));
     expect(find.text('전송됐지만 보드 적용 미확인'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -236,6 +237,25 @@ void main() {
     expect(api.state.heaterMode, 0);
     expect(api.controlFeedback('heaterMode'), contains('적용 미확인'));
     expect(uiBle.commands, ['heaterMode=1']);
+    api.dispose();
+  });
+
+  test('Aquarium 순환 OFF 요청 후 신호가 ON으로 유지되면 적용 성공으로 표시하지 않는다', () async {
+    final uiBle = ImmediateAquariumBle();
+    final api = AquaApi(
+        bleManager: uiBle,
+        controlConfirmTimeout: const Duration(milliseconds: 20));
+    await api.setMode(ConnMode.ble);
+    expect(api.state.pump2On, isTrue);
+    await api.setValue('pump2Mode', 0);
+    uiBle.onStatus?.call('{"cir":0}');
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    expect(uiBle.commands, ['pump2Mode=0']);
+    expect(api.state.pump2On, isTrue);
+    expect(api.controlFeedback('pump2Mode'), contains('적용 미확인'));
+    uiBle.onStatus?.call('{"cir":1}');
+    expect(api.state.pump2On, isFalse);
+    expect(api.controlFeedback('pump2Mode'), contains('적용 미확인'));
     api.dispose();
   });
 

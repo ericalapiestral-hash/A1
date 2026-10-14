@@ -29,7 +29,7 @@ class AquariumState {
   final Set<String> receivedFields = {};
 
   /// B보드 /status JSON 반영
-  void applyJson(Map<String, dynamic> j) {
+  void applyJson(Map<String, dynamic> j, {bool aquariumCirActiveLow = false}) {
     for (final key in ['ph', 'turb', 'lux', 'level']) {
       if (j.containsKey(key) && j[key] == null) receivedFields.remove(key);
     }
@@ -78,7 +78,17 @@ class AquariumState {
     flag('heaterOn', j['heaterOn'] ?? j['ht'], (v) => heaterOn = v);
     flag('oxygenOn', j['oxygenOn'], (v) => oxygenOn = v);
     flag('pump1On', j['pump1On'] ?? j['sup'], (v) => pump1On = v);
-    flag('pump2On', j['pump2On'] ?? j['cir'], (v) => pump2On = v);
+    final canonicalCirculation = _flag(j['pump2On']);
+    final aquariumCirculation = _flag(j['cir']);
+    flag(
+        'pump2On',
+        canonicalCirculation ??
+            (aquariumCirculation == null
+                ? null
+                : aquariumCirActiveLow
+                    ? !aquariumCirculation
+                    : aquariumCirculation),
+        (v) => pump2On = v);
   }
 
   /// 화면에서 값을 바꿀 때 로컬 상태에 즉시 반영(낙관적 업데이트)
