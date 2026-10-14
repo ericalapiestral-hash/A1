@@ -12,9 +12,9 @@ B보드 소스는 히터를 기본 OFF·수동 0/1 모드로 변경하고 자동
 
 저장소 A/B 코드를 적용할 경우 **B를 먼저 갱신**한 뒤 A를 갱신해야 합니다. 기존 B는 새 16바이트를 처리하지 못합니다. 실제 LCD Aquarium의 펌웨어·핀은 아직 확인되지 않았으므로 이 작업에서는 실제 보드에 업로드하지 않았습니다. 새 앱 설치만으로 기존 보드의 온도 기반 자동 제어가 중지되는 것은 아닙니다. 센서를 물리적으로 빼기 전 현재 히터 출력과 펌웨어 설정을 확인해야 합니다.
 
-## PC 점검 프로그램 v1.0
+## PC 점검 프로그램 v1.0 → v1.1
 
-[프로그램 ZIP](https://raw.githubusercontent.com/ericalapiestral-hash/A1/main/tools/board_diagnostics/AquaControl-Board-Diagnostics-v1.0.zip)을 풀어 HTML을 Windows Edge/Chrome에서 엽니다. Arduino IDE·Python·PowerShell·설치용 EXE가 필요하지 않습니다.
+[프로그램 ZIP](https://raw.githubusercontent.com/ericalapiestral-hash/A1/main/tools/board_diagnostics/AquaControl-Board-Diagnostics-v1.1.zip)을 풀어 HTML을 Windows Edge/Chrome에서 엽니다. Arduino IDE·Python·PowerShell·설치용 EXE가 필요하지 않습니다.
 
 - Web Serial 포트 선택·연결·종료, 속도 선택(기본 115200), DTR/RTS 비활성 요청.
 - 선택한 USB 장치 VID/PID 식별. 실제 COM 번호는 브라우저 선택창에서 보고 입력합니다.
@@ -41,7 +41,7 @@ B보드 소스는 히터를 기본 OFF·수동 0/1 모드로 변경하고 자동
 - C++ 센서 패킷 검증 통과. 16/20바이트 수신·이전 수온 무시·잘못된 패킷 거부·A/B 헤더 일치를 확인했습니다.
 - A/B 스케치를 Arduino CLI, ESP32 core 3.3.2, NimBLE-Arduino 2.5.1, LiquidCrystal 1.0.7, `esp32:esp32:esp32` 대상으로 컴파일했습니다. 실제 장비 모델이 이 빌드 대상과 같은지는 확인되지 않았습니다.
 
-실제 Aquarium 제어 명령 규격과 히터·펌프 동작은 PC 보고서를 받은 뒤 별도로 확인해야 합니다.
+후속 PC 점검 v1.1은 사용자 로그의 Aquarium A 문자 형식과 V 단위 표시를 지원합니다. 파서 테스트 10개·브라우저 모의 연결/보고서 재분석을 검증했습니다. [변경 내용](board_diagnostics_v1.1.md). 제공된 로그에서 A/B USB 수신은 확인했으며, 실제 Aquarium 제어 명령 규격과 히터·펌프 동작은 추가 확인이 필요합니다.
 
 APK 서명 검증 통과: 공개 인증서 SHA-256 `40ce6521868bff760955a6333977180c8e26fb9b51c55cd5c70fb66fe836f79c`. 패키지 `com.example.aqua_control`, versionCode 10, target SDK 36.
 

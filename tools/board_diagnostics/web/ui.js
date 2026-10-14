@@ -7,10 +7,16 @@ function render() {
   byId('phase').textContent = phase;
   byId('bytes').textContent = model.bytes.toLocaleString('ko-KR');
   byId('frames').textContent = `${model.frames} / ${model.discarded}`;
+  byId('sensorLines').textContent = `문자 센서 상태 ${model.sensorLines}줄`;
   byId('last').textContent = model.lastReceived ? new Date(model.lastReceived).toLocaleTimeString('ko-KR') : '수신 없음';
   byId('serialIdentity').textContent=serialIdentity;
   byId('usbIdentity').textContent=usbIdentity;
-  for (const key of ['ph','turb','lux']) byId(key).textContent=model.values[key]===null?'미수신':model.values[key].toFixed(key==='lux'?0:2)+(key==='lux'?' %':'');
+  for (const key of ['ph','turb','lux']) {
+    const unit=model.units[key];
+    byId(key).textContent=model.values[key]===null?'미수신':model.values[key].toFixed(unit==='V'?3:unit==='%'?0:2)+(unit?' '+unit:'');
+  }
+  byId('turbLabel').textContent=model.units.turb==='V'?'탁도 센서 신호 전압':model.units.turb==='NTU'?'탁도 · NTU':'탁도 · 단위 미확인';
+  byId('luxLabel').textContent=model.units.lux==='%'?'상대 조도 · %':'조도 · 단위 미확인';
   byId('level').textContent=model.values.level===null?'미수신':model.values.level===1?'정상':'부족';
   for (const key of ['pump1','pump2','heater']) {
     const val=model.values[key]; byId(key).textContent=val===null?'미수신':val?'보드 ON':'보드 OFF';
@@ -94,11 +100,11 @@ async function disconnectPort() {
 }
 function report() {
   return '\uFEFFAquaControl 보드 점검 보고서\n'+
-    `작성: ${new Date().toISOString()}\n보드 선택(사용자 입력): ${byId('board').value}\nCOM 번호(사용자 입력): ${byId('com').value || '미입력'}\n`+
+    `점검 프로그램: v1.1\n작성: ${new Date().toISOString()}\n보드 선택(사용자 입력): ${byId('board').value}\nCOM 번호(사용자 입력): ${byId('com').value || '미입력'}\n`+
     `시리얼 장치: ${serialIdentity}\n별도 선택 USB 장치: ${usbIdentity}\n속도: ${byId('baud').value} baud\n상태: ${phase}\n`+
     `브라우저: ${navigator.userAgent}\nWeb Serial 지원: ${!!navigator.serial}\n보안 컨텍스트: ${isSecureContext}\n`+
-    `수신 바이트: ${model.bytes}\n완전한 JSON: ${model.frames}\n폐기 JSON: ${model.discarded}\n`+
-    '수온 센서: 사용 안 함\n보고된 센서/출력: '+JSON.stringify(model.values)+'\n보고된 GPIO: '+JSON.stringify(model.pins)+'\n'+
+    `수신 바이트: ${model.bytes}\n완전한 JSON: ${model.frames}\n폐기 JSON: ${model.discarded}\n문자 센서 상태 줄: ${model.sensorLines}\n`+
+    '수온 표시·사용: 안 함 (실제 펌웨어의 센서 제거 여부는 미확인)\n보고된 센서/출력: '+JSON.stringify(model.values)+'\n로그상 단위: '+JSON.stringify(model.units)+'\n보고된 GPIO: '+JSON.stringify(model.pins)+'\n'+
     '보드 보고 상태는 실제 펌프 회전·히터 가열 확인과 다릅니다. 이 도구는 시리얼 읽기만 수행합니다.\n'+
     '\n--- 수신 로그 (최근 최대 262144 문자) ---\n'+model.text;
 }
@@ -124,7 +130,7 @@ byId('import').addEventListener('change',async event=>{
   const file=event.target.files[0];if (!file) return;
   if (file.size>4*1024*1024) {note('로그 파일은 4MB 이하로 선택해 주세요.');event.target.value='';return;}
   if (activePort) {note('USB 연결을 닫은 후 로그 파일을 열어 주세요.');event.target.value='';return;}
-  model=new DiagnosticBuffer();model.pushText(await file.text());serialIdentity='로그 파일: '+file.name;phase='저장 로그 분석';note('파일에서 읽은 로그입니다. 현재 연결된 보드의 실시간 상태는 아닙니다.');render();event.target.value='';
+  model=new DiagnosticBuffer();model.loadLog(await file.text());serialIdentity='로그 파일: '+file.name;phase='저장 로그 분석';note('파일의 시리얼 원문을 분석했습니다. 문자 형식만 출력하는 보드는 JSON 수가 0이어도 정상 수신일 수 있습니다. 현재 보드의 실시간 상태와는 구분해 주세요.');render();event.target.value='';
 });
 if (navigator.serial) {
   navigator.serial.addEventListener('connect',refreshPorts);

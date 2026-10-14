@@ -66,7 +66,7 @@ PJ/
 
 **사전 릴리스 v1.3.6**: 수온 센서·목표 수온·수온 추이·히터 자동 모드를 제거했습니다. 히터 수동 제어는 유지합니다. [APK](https://raw.githubusercontent.com/ericalapiestral-hash/A1/main/app/AquaControl-v1.3.6.apk) · [ZIP](https://raw.githubusercontent.com/ericalapiestral-hash/A1/main/app/AquaControl-v1.3.6.zip) · [변경 내용](docs/no_temperature_v1.3.6.md). v1.3.1~v1.3.5 위에 삭제 없이 설치할 수 있습니다. 실제 Aquarium 명령 규격·출력은 여전히 확인이 필요하며, 소스 수정이 실제 보드 펌웨어를 자동 갱신하지는 않습니다.
 
-**Arduino IDE 없는 PC 점검 프로그램**: [프로그램 ZIP](https://raw.githubusercontent.com/ericalapiestral-hash/A1/main/tools/board_diagnostics/AquaControl-Board-Diagnostics-v1.0.zip)을 풀고 HTML을 Edge/Chrome에서 엽니다. 실행 파일·PowerShell 스크립트 없이 USB 로그·USB ID·센서/출력 보고 상태를 읽고 TXT로 저장합니다. [사용 방법과 검증 범위](tools/board_diagnostics/README.txt).
+**Arduino IDE 없는 PC 점검 프로그램 v1.1**: [프로그램 ZIP](https://raw.githubusercontent.com/ericalapiestral-hash/A1/main/tools/board_diagnostics/AquaControl-Board-Diagnostics-v1.1.zip)을 풀고 HTML을 Edge/Chrome에서 엽니다. 실행 파일·PowerShell 스크립트 없이 USB 로그·USB ID·센서/출력 보고 상태를 읽고 TXT로 저장합니다. [사용 방법과 검증 범위](tools/board_diagnostics/README.txt). 실제 Aquarium A의 문자 센서 로그도 해석하며 탁도 전압을 V로 표시합니다. [v1.1 변경 내용](docs/board_diagnostics_v1.1.md).
 
 **수온 제거 후 보드 패킷**: 새 A보드는 센서 4개를 16바이트로 송신합니다. 새 B보드는 16바이트 및 기존 20바이트 A보드 패킷을 수신하며 기존 수온 필드는 무시합니다. 저장소 A/B를 적용할 때는 **B를 먼저 갱신**합니다. 현재 LCD Aquarium은 저장소 펌웨어와 일치하지 않으므로 핀·현재 펌웨어 백업을 확인하기 전 덮어쓰지 마세요. 기존 배선 이미지·과거 릴리스 문서는 해당 버전의 기록이며 현재 수온 없는 구성과 다릅니다.
 

@@ -1,4 +1,4 @@
-﻿AquaControl Windows 보드 점검 프로그램 v1.0
+﻿AquaControl Windows 보드 점검 프로그램 v1.1
 
 Arduino IDE, Python, PowerShell 스크립트, EXE 설치 없이 사용합니다.
 
@@ -7,6 +7,11 @@ Arduino IDE, Python, PowerShell 스크립트, EXE 설치 없이 사용합니다.
 3. [포트 선택·연결]에서 해당 COM 장치를 선택합니다. COM 번호는 선택창에서 확인해 입력할 수 있습니다.
 4. 휴대폰 앱을 BLE로 연결하고 센서·출력 보고 상태와 원문 로그가 나오는지 확인합니다.
 5. [점검 보고서 TXT 저장]을 누르고 보고서 내용을 공유합니다.
+
+v1.1: Aquarium A의 pH=... | 탁도=...V | 수위낮음=... | 급수=... | 순환=... 문자 로그를 해석합니다.
+문자 센서 상태 줄 수를 따로 표시하며 JSON 0개를 센서 미작동으로 판단하지 않습니다.
+탁도 전압은 V로 표시합니다. 없는 히터·조도·GPIO 상태를 추정하지 않습니다.
+기존 TXT 보고서는 머리말의 요약 값을 제외하고 시리얼 원문만 재분석합니다.
 
 기능: 포트 읽기·USB VID/PID 식별·잘린 JSON 복구·현재/기존 보드 로그 해석·보고서 저장.
 수온은 사용하지 않습니다. 읽은 값은 펌웨어 보고 내용이며 실제 히터 가열·펌프 회전을 확인한 것은 아닙니다.
@@ -17,7 +22,8 @@ Smart App Control:
 Windows 보안 설정을 끄거나 파일 차단을 해제하도록 요구하지 않습니다.
 공인 Windows 코드서명 인증서가 없는 EXE에 대해 차단되지 않는다고 보장할 수 없어 이 방식을 선택했습니다.
 조직의 브라우저/USB 정책이나 다른 보안 제품이 접근을 제한하는 경우까지 보장하지는 않습니다.
-실제 Windows PC에서의 Smart App Control·USB 실기 검증은 아직 수행하지 않았습니다.
+사용자 제공 Windows Chrome 보고서에서 A/B 보드 USB 시리얼 수신은 확인했습니다.
+해당 PC의 Smart App Control 설정은 보고서에 없으므로 보안 정책별 차단 여부까지 확인한 것은 아닙니다.
 공식 근거: https://learn.microsoft.com/en-us/windows/apps/develop/smart-app-control/code-signing-for-smart-app-control
 Web Serial: https://developer.chrome.com/docs/capabilities/serial
 
@@ -31,8 +37,13 @@ Web Serial: https://developer.chrome.com/docs/capabilities/serial
 포트를 열 때 일부 보드는 재부팅될 수 있습니다. 기존 B_board.ino는 부팅 시 출력 자가테스트가 있었습니다.
 현재 Aquarium 소스는 없으므로 처음 로그 점검은 실부하 전원을 분리해 진행합니다. 새 저장소 B코드의 부팅 출력 테스트는 제거했습니다.
 
-현재 보드의 원래 펌웨어와 핀 배치는 미확인이므로 점검 프로그램은 보드를 덮어쓰지 않습니다.
+현재 실기 보드의 로그는 저장소 A/B 코드와 다릅니다. 원래 펌웨어와 핀 배치는 미확인이므로 점검 프로그램은 보드를 덮어쓰지 않습니다.
 저장소의 수온 제거 코드가 실제 보드에 자동 설치된 것은 아닙니다.
 기존 Capture-B-board.ps1 / Run-B-board-capture.cmd는 과거 도구이며 새 배포 ZIP에는 포함하지 않습니다.
 
-검증은 Node 로그 파서·브라우저 모의 시리얼·소스 분석으로 수행합니다. 실제 Windows/ESP32 USB 연결은 현장 확인이 필요합니다.
+검증은 Node 로그 파서·브라우저 모의 시리얼·소스 분석으로 수행합니다. 수정본의 Windows 실기 표시·실제 출력 동작은 현장 확인이 필요합니다.
+
+제어 전달 확인: A/B 모두 전원을 켜고 B를 115200 baud로 연결합니다.
+휴대폰 앱을 Aquarium에 연결한 뒤 급수 [끄기]를 한 번 누르고 10초 정도 기다려 B 보고서를 저장합니다.
+부팅의 BLE 광고 시작·ESP-NOW 수신 대기·REFILL 시작 문구만으로 명령 처리나 실제 출력을 확정할 수 없습니다.
+A/B 동시 기록은 브라우저 탭 두 개에서 서로 다른 포트를 선택합니다.

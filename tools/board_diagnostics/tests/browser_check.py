@@ -55,7 +55,8 @@ try:
         output=Path('/tmp/aqua-board-diagnostics-test-report.txt')
         download.value.save_as(output)
         report=output.read_text(encoding='utf-8-sig')
-        assert 'COM5' in report and 'VID 10C4 / PID EA60' in report and '수온 센서: 사용 안 함' in report
+        assert 'COM5' in report and 'VID 10C4 / PID EA60' in report and '실제 펌웨어의 센서 제거 여부는 미확인' in report
+        assert '점검 프로그램: v1.1' in report
         page.get_by_role('button',name='연결 종료',exact=True).click()
         page.wait_for_function("document.getElementById('phase').textContent==='연결 전'")
         calls=page.evaluate('portCalls')
@@ -66,9 +67,33 @@ try:
         page.get_by_role('button',name='포트 선택·연결').click()
         page.wait_for_function("document.getElementById('phase').textContent==='USB 시리얼 연결됨'")
         assert page.locator('#ph').inner_text()=='미수신'
+        page.evaluate("emitSerial('pH=9.65(1.174V) | 탁도=3.118V | 수위낮음=1 | 급수=1 | 순환=1\\n')")
+        assert page.locator('#ph').inner_text()=='9.65'
+        assert page.locator('#turb').inner_text()=='3.118 V'
+        assert page.locator('#turbLabel').inner_text()=='탁도 센서 신호 전압'
+        assert page.locator('#level').inner_text()=='부족'
+        assert page.locator('#heater').inner_text()=='미수신'
+        assert page.locator('#sensorLines').inner_text()=='문자 센서 상태 1줄'
         page.get_by_role('button',name='연결 종료',exact=True).click()
         page.wait_for_function("document.getElementById('phase').textContent==='연결 전'")
-        print('Browser check passed: secure localhost, read-only connect/close, fragmented JSON, report download, clean reconnect.')
+        saved_report='\ufeffAquaControl 보드 점검 보고서\n보고된 센서/출력: {"ph":1,"heaterOn":true}\n\n--- 수신 로그 (최근 최대 262144 문자) ---\npH=7.25(1.600V) | 탁도=3.118V | 수위낮음=0 | 급수=0 | 순환=1'
+        page.locator('#import').set_input_files({'name':'saved-report.txt','mimeType':'text/plain','buffer':saved_report.encode('utf-8')})
+        page.wait_for_function("document.getElementById('phase').textContent==='저장 로그 분석'")
+        assert page.locator('#ph').inner_text()=='7.25'
+        assert page.locator('#turb').inner_text()=='3.118 V'
+        assert page.locator('#level').inner_text()=='정상'
+        assert page.locator('#heater').inner_text()=='미수신'
+        assert page.locator('#frames').inner_text()=='0 / 0'
+        assert page.locator('#sensorLines').inner_text()=='문자 센서 상태 1줄'
+        with page.expect_download() as imported_download:
+            page.get_by_role('button',name='점검 보고서 TXT 저장').click()
+        imported_output=Path('/tmp/aqua-board-diagnostics-import-report.txt')
+        imported_download.value.save_as(imported_output)
+        imported_text=imported_output.read_text(encoding='utf-8-sig')
+        assert '문자 센서 상태 줄: 1' in imported_text and '"turb":"V"' in imported_text
+        assert '보고된 센서/출력: {"ph":7.25' in imported_text
+        assert not errors,errors
+        print('Browser check passed: secure localhost, read-only serial, JSON/ASCII telemetry, report download/import, explicit units, clean reconnect.')
         browser.close()
 finally:
     server.shutdown();server.server_close()
