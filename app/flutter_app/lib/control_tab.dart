@@ -38,7 +38,7 @@ class ControlTab extends StatelessWidget {
                 if (api.isAquariumProfile) ...[
                   const SizedBox(height: 14),
                   const Text(
-                      '현재 Aquarium 보드의 명령 규격은 확인 중입니다. 선택한 입력값과 보드가 보고한 상태를 구분해 표시합니다.',
+                      '보드 ON/OFF는 보드가 보고한 출력 상태입니다. 실제 펌프 작동도 함께 확인해 주세요.',
                       style: TextStyle(fontSize: 12, color: Neo.sub)),
                 ],
               ],
@@ -141,16 +141,29 @@ class ControlTab extends StatelessWidget {
           _deviceRow(
             icon: Icons.water_drop_outlined,
             title: '급수 펌프',
-            subtitle: api.isAquariumProfile ? '보드 보고 상태' : '수위 부족 시 자동 급수',
+            subtitle: '수동 켜기·끄기 · 자동 급수 없음',
             on: api.hasValue('pump1On') ? s.pump1On : null,
           ),
           const SizedBox(height: 13),
-          SlidingSegment(
-            index: api.controlMode('pump1Mode', s.pump1Mode),
-            labels: const ['끄기', '켜기', '자동'],
-            onChanged: (m) => api.setValue('pump1Mode', m),
+          IgnorePointer(
+            ignoring: !api.manualSupplyAvailable,
+            child: Opacity(
+              opacity: api.manualSupplyAvailable ? 1 : 0.45,
+              child: SlidingSegment(
+                index: api.controlMode('pump1Mode', s.pump1Mode),
+                labels: const ['끄기', '켜기'],
+                onChanged: (m) => api.setValue('pump1Mode', m),
+              ),
+            ),
           ),
-          _feedback('pump1Mode'),
+          if (api.manualSupplyAvailable)
+            _feedback('pump1Mode')
+          else
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text('B보드 v1.1.0 업데이트와 급수 출력 설정이 필요합니다.',
+                  style: TextStyle(fontSize: 11, color: Neo.sub)),
+            ),
         ],
       ),
     );

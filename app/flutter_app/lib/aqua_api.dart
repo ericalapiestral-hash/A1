@@ -74,6 +74,8 @@ class AquaApi extends ChangeNotifier {
       key != 'tempSet' &&
       (isDemo || state.receivedFields.contains(key));
   bool get isAquariumProfile => mode == ConnMode.ble && ble.isAquariumProfile;
+  bool get manualSupplyAvailable =>
+      !isAquariumProfile || _lastStatus['manualSupplySupported'] == true;
   String get connectionDiagnostics =>
       ble.diagnostics +
       (_controls.isEmpty
@@ -168,6 +170,14 @@ class AquaApi extends ChangeNotifier {
 
   Future<void> setValue(String key, num value) async {
     if (_disposed) return;
+    if (key == 'pump1Mode' &&
+        ((value != 0 && value != 1) || !manualSupplyAvailable)) {
+      connectionError = !manualSupplyAvailable
+          ? '급수 수동 제어를 지원하는 B보드 v1.1.0과 급수 출력 설정이 필요합니다.'
+          : '급수는 수동 끄기·켜기만 사용할 수 있습니다.';
+      notifyListeners();
+      return;
+    }
     if (key == 'tempSet' || (key == 'heaterMode' && value != 0 && value != 1)) {
       connectionError = '수온 센서가 제거되어 목표 수온과 히터 자동 모드는 사용할 수 없습니다.';
       notifyListeners();
@@ -287,13 +297,7 @@ class AquaApi extends ChangeNotifier {
     } else {
       state.oxygenOn = state.level == 1;
     }
-    if (state.pump1Mode == 1) {
-      state.pump1On = true;
-    } else if (state.pump1Mode == 0) {
-      state.pump1On = false;
-    } else {
-      state.pump1On = state.level == 0;
-    }
+    state.pump1On = state.pump1Mode == 1;
     if (state.pump2Mode == 1) {
       state.pump2On = true;
     } else if (state.pump2Mode == 0) {

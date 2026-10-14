@@ -27,7 +27,11 @@ assert image_end(firmware)==len(firmware)
 marker=b'AQUA_A_PEER_V1'+bytes(32-len('AQUA_A_PEER_V1'))
 assert firmware.count(marker)==1
 offset=firmware.index(marker);assert firmware[offset+32:offset+40]==bytes(8)
-manifest={'backupSha256':hashlib.sha256(original).hexdigest(),'originalAppSha256':hashlib.sha256(original_app).hexdigest(),'originalAppMd5':hashlib.md5(original_app).hexdigest(),'templateSha256':hashlib.sha256(firmware).hexdigest(),'peerConfigOffset':offset,'originalPeerOffset':0x25730}
+previous=(root/'previous/firmware-v1.0.1.bin').read_bytes()
+previous_manifest=json.loads((root/'previous/manifest-v1.0.1.json').read_text())
+assert hashlib.sha256(previous).hexdigest()==previous_manifest['templateSha256']=='5cc3e840ea258f5955f4f8ea67d706cd66cb71b52ab1347d22b471c8e56294ef'
+assert image_end(previous)==len(previous)
+manifest={'backupSha256':hashlib.sha256(original).hexdigest(),'originalAppSha256':hashlib.sha256(original_app).hexdigest(),'originalAppMd5':hashlib.md5(original_app).hexdigest(),'templateSha256':hashlib.sha256(firmware).hexdigest(),'peerConfigOffset':offset,'originalPeerOffset':0x25730,'manualSupply':True,'previousTemplates':[{'version':'1.0.1','templateSha256':previous_manifest['templateSha256'],'peerConfigOffset':previous_manifest['peerConfigOffset']}]}
 (root/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
 shutil.copyfile(args.firmware,root/'firmware-template.bin')
 vendor=root.parent/'firmware_backup/vendor'
@@ -36,13 +40,14 @@ symbols={parts[-1]:parts[0] for item in exports.group(1).split(',') for parts in
 esp='window.AquaBackupVendor=(()=>{'+bundle[:exports.start()]+';return {'+f'ESPLoader:{symbols["ESPLoader"]},Transport:{symbols["Transport"]}'+'};})();'
 assert 'import(' not in esp and 'fetch(' not in esp
 constants='const AQUARIUM_MANIFEST='+json.dumps(manifest)+';\nconst AQUARIUM_IMAGE_BASE64='+json.dumps(base64.b64encode(firmware).decode())+';'
+constants+='\nconst AQUARIUM_PREVIOUS_BASE64='+json.dumps([base64.b64encode(previous).decode()])+';'
 page=(root/'template.html').read_text()
 for name,source in [('VENDOR ESP',esp),('VENDOR MD5',(vendor/'spark-md5-3.0.2.js').read_text()),('MANIFEST',constants),('CORE',(root/'core.js').read_text()),('UI',(root/'ui.js').read_text())]:
     page=page.replace('/* '+name+' */',re.sub(r'</script',r'<\/script',source,flags=re.I))
 assert not re.search(r'/\* (VENDOR|MANIFEST|CORE|UI)',page)
-(root/'Aquarium-B-Circulation-Update.html').write_text(page)
-with ZipFile(root/'Aquarium-B-Circulation-Update-v1.0.1.zip','w',ZIP_DEFLATED) as z:
-    for name in ['Aquarium-B-Circulation-Update.html','README.txt']:z.write(root/name,name)
+(root/'Aquarium-B-Pump-Update.html').write_text(page)
+with ZipFile(root/'Aquarium-B-Pump-Update-v1.1.0.zip','w',ZIP_DEFLATED) as z:
+    for name in ['Aquarium-B-Pump-Update.html','README.txt']:z.write(root/name,name)
     for notice in sorted(vendor.iterdir()):
         if 'LICENSE' in notice.name:z.write(notice,'licenses/'+notice.name)
     z.write(vendor/'sources.json','licenses/sources.json')

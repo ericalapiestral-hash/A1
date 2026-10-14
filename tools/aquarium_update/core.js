@@ -25,7 +25,26 @@ async function checkImage(bytes,sha256,base=0) {
   }
   return layout;
 }
-async function prepareImages(backup,template,manifest,{sha256,md5}) {
+async function personalize(template,meta,peer,sha256,supplyPolarity=0) {
+  if(await sha256(template)!==meta.templateSha256)throw new Error('배포 펌웨어의 무결성이 맞지 않습니다.');
+  const personalized=template.slice(),layout=await checkImage(personalized,sha256);
+  const marker=new TextEncoder().encode('AQUA_A_PEER_V1'),start=meta.peerConfigOffset;
+  if(!Number.isInteger(start) || start<24 || start+40>personalized.length || !layout.segments.some(s=>start>=s.start && start+40<=s.start+s.length))throw new Error('송신 보드 설정 위치가 잘못됐습니다.');
+  if(!marker.every((v,i)=>personalized[start+i]===v) || personalized.slice(start+marker.length,start+40).some(v=>v!==0))throw new Error('송신 보드 설정 템플릿이 잘못됐습니다.');
+  personalized.set(peer,start+32);
+  if(meta.manualSupply)personalized[start+38]=supplyPolarity;
+  let checksum=0xef;
+  for(const segment of layout.segments)for(let p=segment.start;p<segment.start+segment.length;p++)checksum^=personalized[p];
+  personalized[layout.checksumOffset]=checksum;
+  if(layout.hasHash) {
+    const hash=await sha256(personalized.slice(0,layout.hashOffset));
+    personalized.set(Uint8Array.from(hash.match(/../g),x=>parseInt(x,16)),layout.hashOffset);
+  }
+  await checkImage(personalized,sha256);
+  if(personalized.length>APP_LIMIT)throw new Error('앱 파티션 크기를 넘었습니다.');
+  return personalized;
+}
+async function prepareImages(backup,template,manifest,{sha256,md5},previousTemplates=[],supplyPolarity=0) {
   if(backup.length!==4194304 || await sha256(backup)!==manifest.backupSha256)throw new Error('분석한 B보드의 4MB 원본 백업 파일을 선택해 주세요.');
   if(await sha256(template)!==manifest.templateSha256)throw new Error('배포 펌웨어의 무결성이 맞지 않습니다.');
   const originalLayout=await checkImage(backup,sha256,APP_OFFSET);
@@ -36,24 +55,20 @@ async function prepareImages(backup,template,manifest,{sha256,md5}) {
   let matched=false;
   for(let p=0;p<0x1000;p+=32)if(table.getUint16(p,true)===0x50aa && table.getUint8(p+2)===0 && table.getUint32(p+4,true)===APP_OFFSET && table.getUint32(p+8,true)===APP_LIMIT)matched=true;
   if(!matched)throw new Error('현재 B의 app0 파티션 배치와 다릅니다.');
-  const personalized=template.slice(),layout=await checkImage(personalized,sha256);
-  const marker=new TextEncoder().encode('AQUA_A_PEER_V1');
-  const start=manifest.peerConfigOffset;
-  if(!Number.isInteger(start) || start<24 || start+40>personalized.length || !layout.segments.some(s=>start>=s.start && start+40<=s.start+s.length))throw new Error('송신 보드 설정 위치가 잘못됐습니다.');
-  if(!marker.every((v,i)=>personalized[start+i]===v) || personalized.slice(start+marker.length,start+40).some(v=>v!==0))throw new Error('송신 보드 설정 템플릿이 잘못됐습니다.');
+  if(!Number.isInteger(manifest.originalPeerOffset) || manifest.originalPeerOffset<0 || manifest.originalPeerOffset+6>backup.length)throw new Error('원래 A보드 송신 필터 위치가 잘못됐습니다.');
   const peer=backup.slice(manifest.originalPeerOffset,manifest.originalPeerOffset+6);
   if(peer.length!==6 || peer.every(v=>v===0) || peer.every(v=>v===255))throw new Error('원래 A보드 송신 필터를 읽지 못했습니다.');
-  personalized.set(peer,start+32);
-  let checksum=0xef;
-  for(const segment of layout.segments)for(let p=segment.start;p<segment.start+segment.length;p++)checksum^=personalized[p];
-  personalized[layout.checksumOffset]=checksum;
-  if(layout.hasHash) {
-    const hash=await sha256(personalized.slice(0,layout.hashOffset));
-    personalized.set(Uint8Array.from(hash.match(/../g),x=>parseInt(x,16)),layout.hashOffset);
-  }
-  await checkImage(personalized,sha256);
-  if(personalized.length>APP_LIMIT || original.length>APP_LIMIT)throw new Error('앱 파티션 크기를 넘었습니다.');
-  return {original,personalized,originalMd5:md5(original),newMd5:md5(personalized),partitionMd5:md5(backup.slice(0x8000,0x9000)),backupSha256:manifest.backupSha256};
+  if(![0,1,2].includes(supplyPolarity))throw new Error('급수 펌프의 현재 상태를 확인해 선택해 주세요.');
+  const personalized=await personalize(template,manifest,peer,sha256,supplyPolarity);
+  const acceptedApps=[original,personalized];
+  if(manifest.manualSupply)for(const polarity of [1,2])acceptedApps.push(await personalize(template,manifest,peer,sha256,polarity));
+  const previousMeta=manifest.previousTemplates||[];
+  if(previousMeta.length!==previousTemplates.length)throw new Error('이전 버전 복구 이미지가 누락됐습니다.');
+  const previous=[];
+  for(let i=0;i<previousMeta.length;i++)previous.push(await personalize(previousTemplates[i],previousMeta[i],peer,sha256));
+  acceptedApps.push(...previous);
+  if(original.length>APP_LIMIT)throw new Error('앱 파티션 크기를 넘었습니다.');
+  return {original,personalized,rollback:previous[0]||null,acceptedApps:acceptedApps.map(data=>({length:data.length,md5:md5(data)})),supplyRequired:!!manifest.manualSupply,supplyPolarity,originalMd5:md5(original),newMd5:md5(personalized),partitionMd5:md5(backup.slice(0x8000,0x9000)),backupSha256:manifest.backupSha256};
 }
 function restrictWrites(loader) {
   let allow=false,opened=false;
@@ -77,7 +92,9 @@ function restrictWrites(loader) {
   return {enable:()=>{allow=true;},disable:()=>{allow=false;opened=false;}};
 }
 async function updateBoard(loader,images,operation,{sha256,md5,binding=null,onVerified=()=>{},onPhase=()=>{},onProgress=()=>{}}) {
-  if(!['install','restore'].includes(operation))throw new Error('알 수 없는 작업입니다.');
+  if(!['install','restore','rollback'].includes(operation))throw new Error('알 수 없는 작업입니다.');
+  if(operation==='install' && images.supplyRequired && ![1,2].includes(images.supplyPolarity))throw new Error('급수 펌프의 현재 상태를 확인해 선택해 주세요.');
+  if(operation==='rollback' && !images.rollback)throw new Error('순환 v1.0.1 복구 이미지가 없습니다.');
   const guard=restrictWrites(loader);
   try {
     onPhase('B보드 부트로더 연결');await loader.main();
@@ -90,14 +107,14 @@ async function updateBoard(loader,images,operation,{sha256,md5,binding=null,onVe
     const macHash=await sha256(new TextEncoder().encode(mac));
     onPhase('원본 펌웨어·파티션·연결 보드 확인');
     if((await loader.flashMd5sum(0x8000,0x1000)).toLowerCase()!==images.partitionMd5)throw new Error('원래 B보드의 파티션과 다릅니다.');
-    const originalMatches=(await loader.flashMd5sum(APP_OFFSET,images.original.length)).toLowerCase()===images.originalMd5;
-    const newMatches=(await loader.flashMd5sum(APP_OFFSET,images.personalized.length)).toLowerCase()===images.newMd5;
+    let firmwareMatches=false;
+    for(const app of images.acceptedApps)if((await loader.flashMd5sum(APP_OFFSET,app.length)).toLowerCase()===app.md5){firmwareMatches=true;break;}
     const previouslyVerified=binding?.backupSha256===images.backupSha256 && binding?.macHash===macHash;
-    if(!originalMatches && !newMatches && !previouslyVerified)throw new Error('이 백업의 B보드 펌웨어가 아닙니다. A보드나 다른 보드에는 쓰지 않습니다.');
+    if(!firmwareMatches && !previouslyVerified)throw new Error('이 백업의 B보드 펌웨어가 아닙니다. A보드나 다른 보드에는 쓰지 않습니다.');
     const verified={backupSha256:images.backupSha256,macHash};onVerified(verified);
-    const data=operation==='restore'?images.original:images.personalized;
-    const expected=operation==='restore'?images.originalMd5:images.newMd5;
-    onPhase(operation==='restore'?'원본 B 프로그램 복원 중':'순환 수동 제어 프로그램 업데이트 중');
+    const data=operation==='restore'?images.original:operation==='rollback'?images.rollback:images.personalized;
+    const expected=md5(data);
+    onPhase(operation==='restore'?'원본 B 프로그램 복원 중':operation==='rollback'?'순환 v1.0.1 복원 중':'급수 수동 제어 프로그램 업데이트 중');
     guard.enable();
     await loader.writeFlash({fileArray:[{data,address:APP_OFFSET}],flashSize:'keep',flashMode:'keep',flashFreq:'keep',eraseAll:false,compress:true,calculateMD5Hash:md5,reportProgress:onProgress});
     guard.disable();onPhase('쓴 앱 영역 체크섬 검증');

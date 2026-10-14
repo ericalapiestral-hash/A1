@@ -67,6 +67,18 @@ void main() {
     expect(state.receivedFields, containsAll(['lux', 'circOn', 'heaterOn']));
   });
 
+  test('급수 출력 미설정 null은 이전 수신값과 원시 별칭으로 확정하지 않는다', () {
+    final state = AquariumState();
+    state.applyJson({'pump1Mode': 1, 'pump1On': true});
+    expect(state.receivedFields, containsAll(['pump1Mode', 'pump1On']));
+    state.applyJson({'pump1Mode': null, 'pump1On': null, 'sup': 1});
+    expect(state.receivedFields, isNot(contains('pump1Mode')));
+    expect(state.receivedFields, isNot(contains('pump1On')));
+    state.applyJson({'pump1Mode': 0, 'pump1On': false});
+    expect(state.receivedFields, containsAll(['pump1Mode', 'pump1On']));
+    expect(state.pump1On, isFalse);
+  });
+
   test('Aquarium의 실제 순환 신호는 LOW일 때 ON이며 다른 출력은 반전하지 않는다', () {
     final state = AquariumState();
     state.applyJson({'cir': 0, 'sup': 0, 'ht': 0}, aquariumCirActiveLow: true);

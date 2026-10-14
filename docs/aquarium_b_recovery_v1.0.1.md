@@ -25,7 +25,7 @@
 
 ## 새 순환 전용 B 소스
 
-[B_board_Aquarium](../B_board_Aquarium/B_board_Aquarium.ino)는 백업 분석을 바탕으로 새로 작성한 소스입니다. 원본 Arduino 소스를 복원했다고 주장하지 않습니다. 기존 LCD 핀·BLE UUID·A의 12바이트 센서 패킷·송신 보드 필터를 유지하며 A보드를 업로드할 필요가 없습니다. 저장소의 다른 `A_board.ino`는 16바이트 패킷이므로 현재 실기 A에 혼용하지 않습니다.
+[B_board_Aquarium v1.0.1](https://github.com/ericalapiestral-hash/A1/blob/aquarium-b-v1.0.1/B_board_Aquarium/B_board_Aquarium.ino)는 백업 분석을 바탕으로 새로 작성한 소스입니다. 원본 Arduino 소스를 복원했다고 주장하지 않습니다. 기존 LCD 핀·BLE UUID·A의 12바이트 센서 패킷·송신 보드 필터를 유지하며 A보드를 업로드할 필요가 없습니다. 저장소의 다른 `A_board.ino`는 16바이트 패킷이므로 현재 실기 A에 혼용하지 않습니다.
 
 현재 요청에 따라 순환만 제어합니다. 급수·히터 명령은 지원하지 않고 GPIO16/18은 원래 B의 부팅 HIGH로 유지합니다. 이것이 해당 실부하의 물리 OFF라는 의미는 아니므로 급수·히터 전원은 분리 상태를 유지합니다. 다른 출력을 다시 사용하려면 각 배선·극성·제어를 별도 확인해야 합니다.
 
@@ -62,3 +62,5 @@
 
 - `Aquarium-B-Circulation-Update-v1.0.1.zip`: 1,020,918바이트, SHA-256 `a889227760d6a2e5685a8810f69cdc71951a5cdafc686b19c9ce5b1d4e2b7239`
 - `firmware-template.bin`: 1,144,192바이트, SHA-256 `5cc3e840ea258f5955f4f8ea67d706cd66cb71b52ab1347d22b471c8e56294ef`
+
+후속 확인: 사용자가 v1.0.1 설치 후 순환 끄기·켜기와 앱 제어의 정상 작동을 확인했습니다. 급수 수동 제어는 [v1.1.0 / 앱 v1.3.8](manual_supply_v1.3.8.md)에서 추가합니다. 이 문서는 순환 전용 v1.0.1의 기록입니다.

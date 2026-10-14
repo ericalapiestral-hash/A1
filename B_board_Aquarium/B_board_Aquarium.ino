@@ -1,7 +1,7 @@
 // New source based on the provided Aquarium BLE v2 backup, not recovered source.
-// Circulation-only recovery: relay IO17; existing LCD 13,14,27,26,25,33.
-// Supply/heater powers must remain disconnected; their original boot HIGH is
-// preserved on IO16/18 and their controls are not enabled in this firmware.
+// Manual supply IO16 and circulation IO17; existing LCD 13,14,27,26,25,33.
+// Supply polarity is configured by the updater from a physical observation.
+// Heater IO18 keeps its original HIGH; its power must remain disconnected.
 #include <Arduino.h>
 #include <atomic>
 #include <LiquidCrystal.h>
@@ -11,19 +11,22 @@
 #include <esp_wifi.h>
 #include <driver/gpio.h>
 #include "Circulation.h"
+#include "ManualSupply.h"
 
 using namespace aquarium;
 static constexpr int CIR_PIN=17;
+static constexpr int SUP_PIN=16;
 static constexpr char SERVICE_UUID[]="4f7f1234-1234-5678-1234-aaaa00000001";
 static constexpr char STATUS_UUID[]="4f7f1234-1234-5678-1234-aaaa00000002";
 static constexpr char COMMAND_UUID[]="4f7f1234-1234-5678-1234-aaaa00000003";
-struct PeerConfig {char marker[32];uint8_t mac[6];uint8_t reserved[2];};
+struct PeerConfig {char marker[32];uint8_t mac[6];uint8_t supplyPolarity;uint8_t reserved;};
 static_assert(sizeof(PeerConfig)==40,"Peer configuration layout");
 // The updater copies the original sender whitelist here locally. No device MAC
 // is embedded in the public source/template. Volatile prevents zero-folding.
-const volatile PeerConfig peerConfig __attribute__((used))={"AQUA_A_PEER_V1",{0,0,0,0,0,0},{0,0}};
+const volatile PeerConfig peerConfig __attribute__((used))={"AQUA_A_PEER_V1",{0,0,0,0,0,0},0,0};
 LiquidCrystal lcd(13,14,27,26,25,33);
 Circulation circulation;
+ManualSupply supply;
 SensorPacket latestSensor{};
 uint32_t lastSensor=0;
 bool haveSensor=false,peerReady=false;
@@ -48,15 +51,17 @@ String statusJson() {
   packet=latestSensor;received=lastSensor;have=haveSensor;
   portEXIT_CRITICAL(&sensorLock);
   const bool online=have && uint32_t(millis()-received)<8000;
-  String j="{\"firmware\":\"Aquarium-circulation-1.0.1\",\"manualCirculationSupported\":true,\"circulationOnly\":true,";
+  String j="{\"firmware\":\"Aquarium-pumps-1.1.0\",\"manualSupplySupported\":"+String(supply.configured()?"true":"false")+",";
   j+="\"sensorOnline\":"+String(online?"true":"false")+",\"online\":"+String(online?1:0);
   j+=",\"ph\":"+(online?String(packet.ph,2):String("null"));
   j+=",\"turb\":"+(online?String(packet.turbVolts,3):String("null"))+",\"turbUnit\":\"V\"";
   j+=",\"level\":"+(online?String(packet.waterLow?0:1):String("null"));
   j+=",\"water_low\":"+(online?String(packet.waterLow):String("null"));
+  j+=",\"pump1Mode\":"+(supply.configured()?String(supply.mode):String("null"));
+  j+=",\"pump1On\":"+(supply.configured()?String(supply.on(circulation.emergency)?"true":"false"):String("null"));
+  j+=",\"pin16\":"+String(digitalRead(SUP_PIN));
   j+=",\"pump2Mode\":"+String(circulation.mode)+",\"pump2On\":"+String(circulation.on()?"true":"false");
   j+=",\"circOn\":"+String(circulation.onSeconds/60.0,3)+",\"circOff\":"+String(circulation.offSeconds/60.0,3);
-  j+=",\"con\":"+String(circulation.offSeconds)+",\"cof\":"+String(circulation.onSeconds);
   j+=",\"cir\":"+String(circulation.on()?0:1)+",\"pin17\":"+String(digitalRead(CIR_PIN));
   j+=",\"estop\":"+String(circulation.emergency?1:0)+",\"peerConfigured\":"+String(peerReady?"true":"false");
   j+=",\"tempSensorEnabled\":false,\"heaterAutoSupported\":false}";
@@ -97,10 +102,11 @@ void updateLcd() {
   SensorPacket packet;uint32_t received;bool have;
   portENTER_CRITICAL(&sensorLock);packet=latestSensor;received=lastSensor;have=haveSensor;portEXIT_CRITICAL(&sensorLock);
   const bool online=have && uint32_t(millis()-received)<8000;
-  switch (page++%4) {
+  switch (page++%5) {
     case 0:snprintf(first,sizeof(first),"Circ: %s",circulation.on()?"ON":"OFF");snprintf(second,sizeof(second),"Mode:%s IO17:%d",circulation.mode==0?"OFF":circulation.mode==1?"ON":"AUTO",digitalRead(CIR_PIN));break;
     case 1:if(online){snprintf(first,sizeof(first),"pH: %.2f",packet.ph);snprintf(second,sizeof(second),"Turb: %.3fV",packet.turbVolts);}else{strcpy(first,"pH: --");strcpy(second,"Turb: --");}break;
     case 2:snprintf(first,sizeof(first),"Water:%s",online?(packet.waterLow?"LOW":"OK"):"--");snprintf(second,sizeof(second),"Sensor:%s",online?"online":"offline");break;
+    case 3:snprintf(first,sizeof(first),"Supply: %s",supply.configured()?(supply.on(circulation.emergency)?"ON":"OFF"):"SETUP");snprintf(second,sizeof(second),"Manual IO16:%d",digitalRead(SUP_PIN));break;
     default:snprintf(first,sizeof(first),"Circ %lu/%lus",(unsigned long)circulation.onSeconds,(unsigned long)circulation.offSeconds);snprintf(second,sizeof(second),"BLE:%s",bleConnected?"connected":"advertising");break;
   }
   lcdLine(0,first);lcdLine(1,second);
@@ -110,14 +116,16 @@ void setup() {
   // Arduino 3.x ignores digitalWrite before a pin is registered as GPIO.
   // Set the hardware latch first, then enable output and assert the level.
   gpio_set_level(GPIO_NUM_17,0);pinMode(CIR_PIN,OUTPUT);digitalWrite(CIR_PIN,LOW);
-  gpio_set_level(GPIO_NUM_16,1);pinMode(16,OUTPUT);digitalWrite(16,HIGH);
+  supply.polarity=peerConfig.supplyPolarity;
+  gpio_set_level(GPIO_NUM_16,supply.level());pinMode(SUP_PIN,OUTPUT);digitalWrite(SUP_PIN,supply.level());
   gpio_set_level(GPIO_NUM_18,1);pinMode(18,OUTPUT);digitalWrite(18,HIGH);
   pinMode(2,OUTPUT);digitalWrite(2,LOW);
   Serial.begin(115200);delay(300);
-  Serial.println("Aquarium circulation recovery 1.0.1: IO17, boot OFF, manual priority");
+  Serial.println("Aquarium pumps 1.1.0: manual supply IO16, circulation IO17, boot OFF");
+  if(!supply.configured()) Serial.println("[SUPPLY] polarity not configured; commands disabled, IO16 kept HIGH");
   for (size_t i=0;i<6;++i){allowedPeer[i]=peerConfig.mac[i];peerReady|=allowedPeer[i]!=0;}
   Serial.println(peerReady?"[ESP-NOW] original A sender filter configured":"[ESP-NOW] no configured A sender; use the matched-backup updater");
-  lcd.begin(16,2);lcdLine(0,"Aquarium Circ v1");lcdLine(1,"Boot: OFF");
+  lcd.begin(16,2);lcdLine(0,"Aquarium Pumps");lcdLine(1,"Boot: OFF");
   WiFi.mode(WIFI_STA);esp_wifi_set_channel(1,WIFI_SECOND_CHAN_NONE);
   if (esp_now_init()==ESP_OK) esp_now_register_recv_cb(receiveSensor);else Serial.println("[ESP-NOW] init failed");
   commands=xQueueCreate(8,sizeof(QueuedCommand));
@@ -134,13 +142,16 @@ void loop() {
   const uint32_t now=millis();QueuedCommand item;
   while (commands && xQueueReceive(commands,&item,0)==pdTRUE) {
     Serial.printf("[BLE CMD] %s\n",item.text);
-    const Result result=apply(circulation,item.text,now);
+    Result result=applySupply(supply,item.text);
+    if(result==Result::Rejected) result=apply(circulation,item.text,now);
     circulation.step(now);digitalWrite(CIR_PIN,circulation.level());
-    if (result==Result::Rejected) Serial.println("[CMD REJECTED] unsupported circulation command or range");
-    else Serial.printf("[CMD APPLIED] pump2Mode=%u on=%u pin17=%u\n",circulation.mode,circulation.on(),digitalRead(CIR_PIN));
+    digitalWrite(SUP_PIN,supply.level(circulation.emergency));
+    if (result==Result::Rejected) Serial.println("[CMD REJECTED] unsupported command, range or supply not configured");
+    else Serial.printf("[CMD APPLIED] pump1Mode=%u on=%u pin16=%u | pump2Mode=%u on=%u pin17=%u\n",supply.mode,supply.on(circulation.emergency),digitalRead(SUP_PIN),circulation.mode,circulation.on(),digitalRead(CIR_PIN));
     sendSoon=true;
   }
   circulation.step(now);digitalWrite(CIR_PIN,circulation.level());
+  digitalWrite(SUP_PIN,supply.level(circulation.emergency));
   digitalWrite(2,bleConnected?HIGH:LOW);
   static uint32_t lastStatus=0,lastLcd=0;
   if (statusCharacteristic && (sendSoon || uint32_t(now-lastStatus)>=1000)) {sendSoon=false;lastStatus=now;publishStatus();}

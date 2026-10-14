@@ -7,10 +7,10 @@ class AquariumState {
   double lux = 60; // 조도 %
   int level = 1; // 수위 1=정상 0=부족
 
-  // 장치 모드: 0=끄기, 1=켜기, 2=자동
+  // 장치 모드: 0=끄기, 1=켜기, 2=자동(순환·산소만)
   int heaterMode = 0; // 수온 센서 없음: OFF/수동 ON만 지원
   int oxygenMode = 2;
-  int pump1Mode = 2;
+  int pump1Mode = 0; // 급수는 수동 끄기/켜기만 지원
   int pump2Mode = 2;
 
   // 설정값
@@ -30,9 +30,7 @@ class AquariumState {
 
   /// B보드 /status JSON 반영
   void applyJson(Map<String, dynamic> j, {bool aquariumCirActiveLow = false}) {
-    for (final key in ['ph', 'turb', 'lux', 'level']) {
-      if (j.containsKey(key) && j[key] == null) receivedFields.remove(key);
-    }
+    receivedFields.removeWhere((key) => j.containsKey(key) && j[key] == null);
     ph = _d(j['ph'], ph);
     turb = _d(j['turb'], turb);
     lux = _d(j['lux'], lux);
@@ -69,6 +67,8 @@ class AquariumState {
       if (j[key] is num) receivedFields.add(key);
     }
     void flag(String key, dynamic value, void Function(bool) assign) {
+      // 명시적인 null은 출력 미확인이다. 이전 상태나 별칭으로 확정하지 않는다.
+      if (j.containsKey(key) && j[key] == null) return;
       final parsed = _flag(value);
       if (parsed == null) return;
       assign(parsed);

@@ -52,13 +52,13 @@ void main() {
     expect(platform.discoverCount, 1);
     expect(platform.notifiedCharacteristic, BleManager.aquariumStatusUuid);
     expect(platform.readCharacteristicId, BleManager.aquariumStatusUuid);
-    await api.setValue('pump1Mode', 0);
+    await api.setValue('pump2Mode', 0);
     expect(platform.lastWrite?.serviceUuid, BleManager.aquariumSvcUuid);
     expect(platform.lastWrite?.characteristicUuid, BleManager.aquariumCmdUuid);
-    expect(utf8.decode(platform.lastWrite!.value), 'pump1Mode=0\n');
-    expect(api.state.pump1Mode, 2);
-    expect(api.controlMode('pump1Mode', api.state.pump1Mode), 0);
-    expect(api.controlFeedback('pump1Mode'), contains('확인 대기'));
+    expect(utf8.decode(platform.lastWrite!.value), 'pump2Mode=0\n');
+    expect(api.state.pump2Mode, 2);
+    expect(api.controlMode('pump2Mode', api.state.pump2Mode), 0);
+    expect(api.controlFeedback('pump2Mode'), contains('확인 대기'));
     expect(api.connectionDiagnostics, contains('사용 구성: Aquarium'));
     expect(api.connectionDiagnostics, contains('수신 예시'));
     api.dispose();
@@ -193,7 +193,7 @@ void main() {
     expect(find.text('5분'), findsOneWidget);
     expect(find.text('켜기'), findsNWidgets(3));
     expect(find.text('끄기'), findsNWidgets(3));
-    expect(find.text('자동'), findsNWidgets(2));
+    expect(find.text('자동'), findsOneWidget);
     await tester.tap(find.text('켜기').first);
     await tester.pump();
     expect(uiBle.commands, ['heaterMode=1']);
@@ -204,6 +204,107 @@ void main() {
     expect(find.text('전송됐지만 보드 적용 미확인'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
+    api.dispose();
+  });
+
+  testWidgets('급수는 두 버튼만 표시하고 미지원 보드에서는 전송하지 않는다', (tester) async {
+    final uiBle = ImmediateAquariumBle();
+    final api = AquaApi(bleManager: uiBle);
+    await api.setMode(ConnMode.ble);
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+      body: ListenableBuilder(
+          listenable: api,
+          builder: (context, _) => ControlTab(api: api, onSettings: () {})),
+    )));
+    final supplyOn = find.text('켜기').at(1);
+    await tester.ensureVisible(supplyOn);
+    await tester.tap(supplyOn, warnIfMissed: false);
+    await tester.pump();
+    expect(uiBle.commands, isEmpty);
+    expect(find.text('자동'), findsOneWidget);
+    expect(find.text('B보드 v1.1.0 업데이트와 급수 출력 설정이 필요합니다.'), findsOneWidget);
+
+    uiBle.onStatus
+        ?.call('{"manualSupplySupported":true,"pump1Mode":0,"pump1On":false}');
+    await tester.pump();
+    await tester.tap(supplyOn);
+    await tester.pump();
+    expect(uiBle.commands, ['pump1Mode=1']);
+    expect(api.state.pump1On, isFalse);
+    expect(find.text('전송됨 · 보드 설정값 확인 대기'), findsOneWidget);
+    uiBle.onStatus
+        ?.call('{"manualSupplySupported":true,"pump1Mode":1,"pump1On":true}');
+    await tester.pump();
+    expect(api.state.pump1On, isTrue);
+    expect(find.text('보드 설정값 확인됨'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    api.dispose();
+  });
+
+  test('급수 지원 여부를 받은 뒤에도 쓰기 ACK만으로 출력 적용을 확인하지 않는다', () async {
+    final uiBle = ImmediateAquariumBle();
+    final api = AquaApi(bleManager: uiBle);
+    await api.setMode(ConnMode.ble);
+    expect(api.manualSupplyAvailable, isFalse);
+    await api.setValue('pump1Mode', 1);
+    expect(uiBle.commands, isEmpty);
+
+    uiBle.onStatus
+        ?.call('{"manualSupplySupported":true,"pump1Mode":0,"pump1On":false}');
+    expect(api.manualSupplyAvailable, isTrue);
+    await api.setValue('pump1Mode', 1);
+    expect(uiBle.commands, ['pump1Mode=1']);
+    expect(api.state.pump1Mode, 0);
+    expect(api.state.pump1On, isFalse);
+    expect(api.controlFeedback('pump1Mode'), contains('확인 대기'));
+    uiBle.onStatus?.call('{"manualSupplySupported":true,"sup":1}');
+    expect(api.controlFeedback('pump1Mode'), contains('확인 대기'));
+    uiBle.onStatus
+        ?.call('{"manualSupplySupported":true,"pump1Mode":1,"pump1On":true}');
+    expect(api.state.pump1Mode, 1);
+    expect(api.state.pump1On, isTrue);
+    expect(api.controlFeedback('pump1Mode'), '보드 설정값 확인됨');
+    await api.setValue('pump1Mode', 0);
+    uiBle.onStatus
+        ?.call('{"manualSupplySupported":true,"pump1Mode":0,"pump1On":false}');
+    expect(uiBle.commands, ['pump1Mode=1', 'pump1Mode=0']);
+    expect(api.state.pump1On, isFalse);
+    api.dispose();
+  });
+
+  test('급수 자동 요청은 지원 보드에서도 전송하지 않고 순환 자동은 유지한다', () async {
+    final uiBle = ImmediateAquariumBle();
+    final api = AquaApi(bleManager: uiBle);
+    await api.setMode(ConnMode.ble);
+    uiBle.onStatus?.call('{"manualSupplySupported":true}');
+    await api.setValue('pump1Mode', 2);
+    expect(uiBle.commands, isEmpty);
+    expect(api.connectionError, contains('수동 끄기·켜기만'));
+    await api.setValue('pump2Mode', 2);
+    expect(uiBle.commands, ['pump2Mode=2']);
+    uiBle.onStatus?.call('{"manualSupplySupported":false}');
+    await api.setValue('pump1Mode', 1);
+    expect(uiBle.commands, ['pump2Mode=2']);
+    expect(api.manualSupplyAvailable, isFalse);
+    api.dispose();
+  });
+
+  test('데모 급수는 수위 부족 때도 자동으로 시작하지 않고 수동 상태를 유지한다', () async {
+    final api = AquaApi();
+    api.state.level = 0;
+    await api.refresh();
+    expect(api.state.pump1Mode, 0);
+    expect(api.state.pump1On, isFalse);
+    await api.setValue('pump1Mode', 1);
+    await api.refresh();
+    expect(api.state.pump1On, isTrue);
+    await api.setValue('pump1Mode', 2);
+    expect(api.state.pump1Mode, 1);
+    expect(api.state.pump1On, isTrue);
+    await api.setValue('pump1Mode', 0);
+    await api.refresh();
+    expect(api.state.pump1On, isFalse);
     api.dispose();
   });
 

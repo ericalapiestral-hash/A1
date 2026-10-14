@@ -35,6 +35,14 @@ function board(f) {
   }
  };
 }
+function supplyFixture(){
+ const f=fixture();
+ const oldData=f.template.slice(32,160);oldData[0]=77;
+ f.previous=espImage(oldData);
+ f.manifest.manualSupply=true;
+ f.manifest.previousTemplates=[{templateSha256:hash('sha256',f.previous),peerConfigOffset:f.manifest.peerConfigOffset}];
+ return f;
+}
 test('personalization preserves original sender only in prepared bytes and verifies the rebuilt image',async()=>{
  const f=fixture(),images=await prepareImages(f.backup,f.template,f.manifest,hashes);
  assert.deepEqual(images.personalized.slice(80,86),Uint8Array.from([2,4,6,8,10,12]));
@@ -96,4 +104,36 @@ test('protocol guard denies writes before validation, whole erase and all non-ap
  assert.throws(()=>loader.command(0xd0),/삭제/);assert.throws(()=>loader.command(0xd1),/삭제/);assert.throws(()=>loader.eraseFlash(),/전체 삭제/);
  guard.disable();view.setUint32(12,0x10000,true);assert.throws(()=>loader.command(0x10,payload),/확인 전/);
  assert.equal(loader.commands.length,0);
+});
+test('manual supply installation requires an explicit physical polarity, while recovery stays available',async()=>{
+ const f=supplyFixture(),images=await prepareImages(f.backup,f.template,f.manifest,hashes,[f.previous]);
+ const loader=board(f);
+ await assert.rejects(updateBoard(loader,images,'install',hashes),/급수 펌프의 현재 상태/);
+ assert.equal(loader.writes.length,0);
+ await updateBoard(loader,images,'rollback',hashes);
+ assert.equal(hash('md5',loader.current.slice(0x10000,0x10000+images.rollback.length)),hash('md5',images.rollback));
+});
+test('working v1.0.1 upgrades without saved browser binding and can be restored without changing other flash areas',async()=>{
+ const f=supplyFixture(),images=await prepareImages(f.backup,f.template,f.manifest,hashes,[f.previous],1);
+ const loader=board(f);loader.current.set(images.rollback,0x10000);
+ const before=loader.current.slice();
+ await updateBoard(loader,images,'install',hashes);
+ assert.equal(images.personalized[f.manifest.peerConfigOffset+38],1);
+ assert.deepEqual(loader.current.slice(0,0x10000),before.slice(0,0x10000));
+ assert.deepEqual(loader.current.slice(0x310000),before.slice(0x310000));
+ await updateBoard(loader,images,'rollback',hashes);
+ assert.equal(hash('md5',loader.current.slice(0x10000,0x10000+images.rollback.length)),hash('md5',images.rollback));
+});
+test('both supply polarity variants are recognized for correction and their image checksums remain valid',async()=>{
+ const f=supplyFixture();
+ const first=await prepareImages(f.backup,f.template,f.manifest,hashes,[f.previous],1);
+ const second=await prepareImages(f.backup,f.template,f.manifest,hashes,[f.previous],2);
+ const loader=board(f);loader.current.set(first.personalized,0x10000);
+ await updateBoard(loader,second,'install',hashes);
+ assert.equal(loader.current[0x10000+f.manifest.peerConfigOffset+38],2);
+ await checkImage(second.personalized,hashes.sha256);
+ const damaged=f.previous.slice();damaged[40]^=1;
+ await assert.rejects(prepareImages(f.backup,f.template,f.manifest,hashes,[damaged],1),/무결성/);
+ await assert.rejects(prepareImages(f.backup,f.template,f.manifest,hashes,[],1),/복구 이미지가 누락/);
+ await assert.rejects(prepareImages(f.backup,f.template,f.manifest,hashes,[f.previous],3),/급수 펌프의 현재 상태/);
 });
