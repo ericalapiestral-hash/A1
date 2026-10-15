@@ -1,0 +1,2 @@
+# Keep Windows-friendly UTF-8 BOM / CRLF TXT files byte-for-byte.
+*.txt -text whitespace=trailing-space,space-before-tab,cr-at-eol

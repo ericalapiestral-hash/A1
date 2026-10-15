@@ -1,0 +1,46 @@
+﻿AquaControl 설명 자료 — 2026-10-15
+
+PPT 파일은 만들지 않았습니다.
+본인이 발표 자료에 넣을 수 있는 PNG 8장과 TXT 설명서를 준비했습니다.
+
+파일 안내
+  01_상세설명_센서_전기_배선_코드.txt
+    전체 구성, 장치별 역할, 전기 기초, B/LCD 배선, 릴레이,
+    센서 측정 원리, 코드 파일/함수별 역할과 설계 이유를 자세히 설명합니다.
+
+  02_발표대본_그림설명_예상질문.txt
+    30초 소개, 그림별 설명 문장, 코드 소개, 예상 질문과 답변입니다.
+
+  03_장치목록_배선확인표.txt
+    장치 목록과 확인된 항목, 아직 실물을 확인해야 하는 항목을 정리했습니다.
+
+  00_diagram_index.png
+    그림 8장을 한 번에 볼 수 있는 미리보기입니다.
+
+  images/01_system_overview.png             전체 구성
+  images/02_current_sensors.png             센서 연결과 확인 범위
+  images/03_b_board_connections.png          현재 B보드 연결표
+  images/04_lcd_wiring.png                   B보드 LCD 신호선
+  images/05_relay_and_dc_pump.png            릴레이와 DC 펌프 원리
+  images/06_power_domains.png               제어 전원/DC/AC 전력 구분
+  images/07_sensor_signal_principles.png     센서 신호·분압·단위
+  images/08_control_and_timing.png           앱 명령·출력·순환 타이머
+
+PNG는 각각 2560×1440 해상도입니다. 개별 그림은 16:9 발표 화면에 넣기 쉽습니다.
+TXT는 Windows 메모장에서 읽기 쉽도록 UTF-8 BOM과 CRLF 줄바꿈으로 저장했습니다.
+
+꼭 읽을 범위 안내
+  - 기준은 앱 v1.3.8 / Aquarium B 펌웨어 v1.1.0의 배포 소스입니다.
+  - 순환 v1.0.1은 사용자 실기 정상 확인을 받았습니다.
+  - 새 급수 v1.1.0의 실제 설치·급수 동작은 아직 확인받지 못했습니다.
+  - 현재 A보드 원본 소스, 정확한 센서 핀·모델, 펌프 명판과 릴레이 접점은 미확인입니다.
+  - 그림은 코드와 확인된 사실로 만든 설명도이며 실물 사진은 아닙니다.
+  - '원리 예시/확인 필요' 부분을 그대로 실제 배선이라고 단정하지 않습니다.
+  - 저장소의 예전 B 출력 GPIO25/26/27과 현재 Aquarium B의 GPIO16/17/18을 혼용하지 않습니다.
+  - 현재 급수는 수동만 사용하며 수위나 통신 단절로 자동 정지하지 않습니다.
+
+원본 코드 기준 커밋
+  8cde2fb3a084ad7a56a580b6874f041b6848edde
+  https://github.com/ericalapiestral-hash/A1/tree/8cde2fb3a084ad7a56a580b6874f041b6848edde
+
+이 묶음에는 펌웨어 BIN, APK, 원본 백업, 개인 장치 주소, 서명 키가 포함되지 않습니다.
