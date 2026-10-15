@@ -41,10 +41,12 @@ page=(root/'template.html').read_text()
 for name,source in [('VENDOR ESP',esp),('VENDOR MD5',(vendor/'spark-md5-3.0.2.js').read_text()),('MANIFEST',constants),('CORE',(root/'core.js').read_text()),('UI',(root/'ui.js').read_text())]:page=page.replace('/* '+name+' */',re.sub(r'</script',r'<\/script',source,flags=re.I))
 assert not re.search(r'/\* (VENDOR|MANIFEST|CORE|UI)',page)
 (root/'Aquarium-B-Heater-Update.html').write_text(page)
-with ZipFile(root/'Aquarium-B-Heater-Update-v1.2.0.zip','w',ZIP_DEFLATED) as z:
-    for name in ['Aquarium-B-Heater-Update.html','Heater-Relay-Check.html','README.txt']:z.write(root/name,name)
+with ZipFile(root/'Aquarium-B-Heater-Update-v1.2.1.zip','w',ZIP_DEFLATED) as z:
+    for name in ['Aquarium-B-Heater-Update.html','Heater-Relay-Check.html','README.txt','Relay-Check-README.txt']:z.write(root/name,name)
     for p in sorted(vendor.iterdir()):
         if 'LICENSE' in p.name:z.write(p,'licenses/'+p.name)
     z.write(vendor/'sources.json','licenses/sources.json')
     for p in sorted((old/'licenses').iterdir()):z.write(p,'licenses/firmware/'+p.name)
-print('Built heater v1.2.0 offline updater and USB relay checker. No original backup/device MAC distributed.')
+with ZipFile(root/'Heater-Relay-Check-v1.2.1.zip','w',ZIP_DEFLATED) as z:
+    for name in ['Heater-Relay-Check.html','Relay-Check-README.txt']:z.write(root/name,name)
+print('Built tool package v1.2.1 and standalone relay checker. Firmware remains v1.2.0; no original backup/device MAC distributed.')

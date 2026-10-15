@@ -1,4 +1,8 @@
-Aquarium B 히터 수동 제어 업데이트 v1.2.0
+Aquarium B 히터 도구 묶음 v1.2.1 / B 펌웨어 v1.2.0
+
+v1.2.1은 PC 릴레이 점검 도구만 수정했습니다. B에 이미 v1.2.0을 설치했다면 다시 업로드하지 않습니다.
+로그가 비어 있을 때의 DTR/RTS 해제, status 요청, 수신 바이트 표시와 정상 재시작 기능을 추가했습니다.
+Heater-Relay-Check.html만 새로 열어 사용합니다. 자세한 절차는 Relay-Check-README.txt를 참고하세요.
 
 현재 Aquarium 히터 핀은 GPIO18입니다. 저장소의 예전 B_board(히터GPIO27)와 다릅니다.
 원본 펌웨어 분석과 현재 소스에서 GPIO18 역할을 확인했지만 실물 IN/COM/NO/NC 연결은 아직 확인되지 않았습니다.

@@ -27,10 +27,13 @@ AquaBackupVendor.ESPLoader=class {
 Object.defineProperty(navigator,'serial',{value:{requestPort:async()=>({})},configurable:true});
 '''
 serial=r'''
-window.usbWrites=[];window.pushUsb=null;window.usbPort={
- async open(){},async close(){},
- readable:new ReadableStream({start(c){window.pushUsb=data=>c.enqueue(new TextEncoder().encode(data+'\n'));}}),
- writable:new WritableStream({write(bytes){usbWrites.push(new TextDecoder().decode(bytes));}})
+window.usbWrites=[];window.signalCalls=[];window.pushUsb=null;window.heldInReset=true;window.autoStatus=false;
+window.statusFixture={firmware:'Aquarium-control-1.2.0',heaterManualSupported:false,pin18:1,check18:false,estop:0};
+window.usbPort={
+ async open(options){window.openOptions=options;heldInReset=true;},async close(){},
+ async setSignals(options){signalCalls.push(options);heldInReset=options.dataTerminalReady||options.requestToSend;},
+ readable:new ReadableStream({start(c){window.pushRaw=data=>c.enqueue(new TextEncoder().encode(data));window.pushUsb=data=>pushRaw(data+'\n');}}),
+ writable:new WritableStream({write(bytes){const text=new TextDecoder().decode(bytes);usbWrites.push(text);if(text==='status\n'&&autoStatus&&!heldInReset){const raw='\uFEFFI (USB) '+JSON.stringify(statusFixture);pushRaw(raw.slice(0,22));pushRaw(raw.slice(22));}}})
 };
 Object.defineProperty(navigator,'serial',{value:{requestPort:async()=>usbPort},configurable:true});
 '''
@@ -75,13 +78,15 @@ try:
   page=browser.new_page(accept_downloads=True);page.on('pageerror',lambda e:errors.append(str(e)))
   page.goto(f'http://127.0.0.1:{server.server_port}/Heater-Relay-Check.html');page.evaluate(serial)
   assert page.locator('#low').is_disabled();page.locator('#connect').click();page.wait_for_function('() => !!writer')
+  assert page.evaluate('signalCalls.length===1 && signalCalls[0].dataTerminalReady===false && signalCalls[0].requestToSend===false')
+  assert page.evaluate("openOptions.flowControl==='none' && openOptions.baudRate===115200")
   page.evaluate("pushUsb(JSON.stringify({firmware:'Aquarium-pumps-1.1.0',heaterManualSupported:false,pin18:1,check18:false,estop:0}))")
   page.locator('#ready').check();assert page.locator('#low').is_disabled()
   page.evaluate("pushUsb(JSON.stringify({firmware:'Aquarium-control-1.2.0',heaterManualSupported:true,pin18:1,check18:false,estop:0}))")
   page.wait_for_function("() => document.getElementById('locked').textContent.includes('활성화')");assert page.locator('#low').is_disabled()
   page.evaluate("pushUsb(JSON.stringify({firmware:'Aquarium-control-1.2.0',heaterManualSupported:false,pin18:1,check18:false,estop:0}))")
   page.wait_for_function("() => !document.getElementById('low').disabled")
-  assert page.evaluate('usbWrites.length===0')
+  assert page.evaluate("usbWrites.every(x=>x==='status\\n')")
   page.locator('#low').click();page.wait_for_function("() => usbWrites.includes('check18=0\\n')")
   page.evaluate("pushUsb(JSON.stringify({firmware:'Aquarium-control-1.2.0',heaterManualSupported:false,pin18:0,check18:true,estop:0}))")
   page.wait_for_function("() => document.getElementById('checking').textContent.includes('점검 중')")
@@ -93,7 +98,35 @@ try:
   report=Path('/tmp/aquarium-heater-relay-check-report.txt');download.value.save_as(report)
   assert 'Mock observation' in report.read_text(encoding='utf-8-sig')
   page.locator('#disconnect').click();page.wait_for_function('() => port===null')
+  page.close()
+  # A reset-held mock stays silent until both signals are released and status is requested.
+  page=browser.new_page(accept_downloads=True);page.on('pageerror',lambda e:errors.append(str(e)))
+  page.goto(f'http://127.0.0.1:{server.server_port}/Heater-Relay-Check.html');page.evaluate(serial);page.evaluate('autoStatus=true')
+  page.locator('#connect').click();page.wait_for_function('() => statusCount>=1')
+  assert page.evaluate("signalReleased && !heldInReset && rxBytes>0 && signalCalls.length===1 && usbWrites.every(x=>x==='status\\n')")
+  assert page.locator('#low').is_disabled() # Fresh status alone must not bypass load-power confirmation.
+  assert '잠금 상태 확인' in page.locator('#phase').inner_text()
+  page.evaluate('autoStatus=false');page.locator('#ready').check();assert page.locator('#low').is_enabled()
+  # Corrupt first frame, UTF-8 prefix, split chunks, multiple objects without newline resynchronize.
+  page.evaluate("pushRaw('{bad-partial');pushRaw('I '+JSON.stringify(statusFixture));pushRaw(JSON.stringify(statusFixture))")
+  page.wait_for_function('() => statusCount>=3')
+  page.evaluate("pushUsb('boot:0x3 (DOWNLOAD_BOOT) waiting for download')")
+  page.wait_for_function('() => bootloader')
+  assert page.locator('#low').is_disabled();assert '다운로드 모드' in page.locator('#phase').inner_text()
+  page.locator('#ready').uncheck();assert page.locator('#restart').is_disabled()
+  page.locator('#ready').check();page.evaluate('autoStatus=true');page.locator('#restart').click()
+  page.wait_for_function('() => !restarting && recognized()')
+  assert page.evaluate('signalCalls.length===3 && signalCalls[1].requestToSend===true && signalCalls[1].dataTerminalReady===false && signalCalls[2].requestToSend===false')
+  assert page.evaluate("usbWrites.every(x=>x==='status\\n')") # Reset/status actions never send relay commands.
+  page.locator('#disconnect').click();page.wait_for_function('() => port===null');page.close()
+  page=browser.new_page();page.on('pageerror',lambda e:errors.append(str(e)))
+  page.goto(f'http://127.0.0.1:{server.server_port}/Heater-Relay-Check.html');page.evaluate(serial)
+  page.locator('#connect').click();page.wait_for_function('() => !!writer')
+  page.evaluate('connectedAt=Date.now()-9000;render()')
+  assert '수신 0바이트' in page.locator('#phase').inner_text();assert page.locator('#low').is_disabled()
+  assert page.evaluate('signalCalls.length===1') # Timeout never resets a board automatically.
+  page.locator('#disconnect').click();page.wait_for_function('() => port===null')
   assert not errors,errors
   browser.close()
- print('Heater browser passed: prior supply preservation, lock/enable gate, MD5, reports, both previous rollbacks, original restore; serial firmware/power/stale gates and explicit check/stop commands.')
+ print('Heater browser passed: updater/restore unchanged; serial DTR/RTS release, status recovery from silence, framing, bootloader/manual-reset flow, no-data guidance, power/firmware/stale gates and explicit relay commands.')
 finally:server.shutdown();server.server_close()
