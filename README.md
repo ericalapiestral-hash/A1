@@ -1,5 +1,7 @@
 # 수조(Aquarium) 모니터링·제어 시스템
 
+**히터 수동 제어·연결 점검 B v1.2.0**: 현재 Aquarium 히터용 GPIO18에 수동 명령과 상태 회신을 추가했습니다. [B 업데이트·USB 릴레이 점검 ZIP](https://raw.githubusercontent.com/ericalapiestral-hash/A1/main/tools/heater_update/Aquarium-B-Heater-Update-v1.2.0.zip) · [설치·실물 확인 범위](docs/manual_heater_v1.2.0.md). 기존 앱 v1.3.8을 사용합니다. 급수 설정 자동 유지와 순환 기능을 보존하며, 실물 배선이 미확인이므로 처음에는 히터 잠금 설치 후 모든 부하 전원을 분리한 GPIO18 점검을 진행합니다. 배선/정지 신호 확인 전 활성화하지 않습니다. 수온 자동 제어는 없습니다.
+
 **2026-10-15 설명 자료 — 현재 Aquarium 코드 기준**: [배선·동작 PNG 8장 + 쉬운 설명 TXT 묶음 다운로드](https://raw.githubusercontent.com/ericalapiestral-hash/A1/main/docs/explainer_2026-10-15/AquaControl-Explanation-2026-10-15.zip) · [내용과 그림 미리보기](docs/explainer_2026-10-15/README.md). 앱 v1.3.8 / B v1.1.0의 센서·전기·배선·코드 설명과 발표 대본을 제공합니다. 실제 A 입력 핀·장치 정격 등 미확인 정보와 아래 별도 설계의 차이를 표시했습니다. 그림은 실물 사진이 아닌 코드 기반 설명도입니다.
 
 ESP32 **2보드 + 안드로이드 앱** 으로 수조의 센서를 모니터링하고 펌프·히터를 제어합니다.

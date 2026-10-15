@@ -1,0 +1,25 @@
+{
+  "version": "1.2.0",
+  "backupSha256": "fa6ad0beadf2dae49b37f7a02ea9d80bf98490e1f4ca26a88ed47e71973b3a83",
+  "originalAppSha256": "6804b8a7ba079fe4edb3b7114f238745395cf16561b3998dbfed0d457bcaf6dc",
+  "originalAppMd5": "aeb514224a0840c71083660f035d3ef9",
+  "templateSha256": "0c4a1d7cf9e47c96faab91c46bde659f3d73956863e3a608fb0a525e89df251d",
+  "peerConfigOffset": 76044,
+  "originalPeerOffset": 153392,
+  "manualSupply": true,
+  "manualHeater": true,
+  "previousTemplates": [
+    {
+      "version": "1.1.0",
+      "templateSha256": "61d5ccd7879d99c53594e007b8a5a0e5b70c76b8d6368783fc740d0beec07001",
+      "peerConfigOffset": 75568,
+      "manualSupply": true
+    },
+    {
+      "version": "1.0.1",
+      "templateSha256": "5cc3e840ea258f5955f4f8ea67d706cd66cb71b52ab1347d22b471c8e56294ef",
+      "peerConfigOffset": 75436,
+      "manualSupply": false
+    }
+  ]
+}

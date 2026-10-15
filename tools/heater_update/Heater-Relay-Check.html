@@ -1,0 +1,67 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src data:; base-uri 'none'; form-action 'none'"><link rel="icon" href="data:,"><title>B보드 GPIO18 릴레이 연결 점검</title><style>body{font:16px/1.7 "Malgun Gothic",Arial,sans-serif;background:#f1f6f8;color:#173543;margin:0}main{max-width:980px;margin:auto;padding:28px 20px}section{background:white;border:1px solid #d3e1e7;border-radius:14px;padding:22px;margin:18px 0}h1{font-size:27px}h2{font-size:19px}button{font:inherit;padding:12px 18px;margin:8px;border:1px solid #abc5d0;border-radius:9px;cursor:pointer;background:#fff;color:#173543}button:disabled{opacity:.45;cursor:default}.confirm{display:block;padding:16px;background:#fff0d8}textarea{box-sizing:border-box;width:100%;padding:12px;font:14px/1.6 Consolas,"Malgun Gothic",monospace}#log{height:260px;background:#112b38;color:#edf7fc}#phase{font-weight:bold}table{border-collapse:collapse;width:100%}td,th{border:1px solid #d3e1e7;padding:10px;text-align:left}#observation{min-height:90px}</style></head><body><main>
+<h1>B보드 GPIO18 릴레이 연결 점검</h1>
+<p>히터 전원을 연결하지 않고 <b>GPIO18 신호와 어느 릴레이가 반응하는지</b>를 확인하는 도구입니다. 실제 히터 연결·온도·전류를 자동 판정하지 않습니다.</p>
+<section><h2>1. 준비</h2><ol><li><b>히터·펌프 등 모든 부하의 전원 플러그를 뽑고 B보드만 USB로 연결</b>합니다. 릴레이 전력 접점에는 전압이 없어야 합니다.</li><li>B 업데이트 도구 v1.2.0에서 기본 <b>히터 잠금 유지</b>로 설치한 상태여야 합니다. 업데이트/로그 도구의 COM 연결을 종료합니다.</li><li>아래에서 B COM5에 연결하고 펌웨어 상태가 확인될 때까지 기다립니다.</li><li>준비 확인 후 LOW/HIGH 점검 버튼을 눌러 어느 릴레이의 LED·작동 소리가 바뀌는지 관찰합니다. 각 명령은 최대 5초이며 이후 기존 HIGH로 돌아갑니다.</li><li>히터에 연결된 릴레이인지와 실제 정지 신호는 전원을 분리한 배선·접점 확인이 필요합니다. LED만으로 단정하지 마세요. AC 단자 점검은 적절한 작업자가 수행합니다.</li></ol>
+<label class="confirm"><input id="ready" type="checkbox">모든 부하 전원 플러그를 뽑아 릴레이 전력 접점에 전압이 없고, B/제어측만 전원이 켜져 있습니다.</label>
+<button id="connect">B보드 COM 연결</button><button id="disconnect" disabled>연결 종료</button><p id="phase" role="status">B보드 연결 전</p></section>
+<section><h2>2. GPIO18만 점검</h2><table><tr><th>항목</th><th>최근 보드 보고값</th></tr><tr><td>펌웨어</td><td id="firmware">미수신</td></tr><tr><td>히터 잠금 상태</td><td id="locked">미수신</td></tr><tr><td>GPIO18 수준</td><td id="pin18">미수신</td></tr><tr><td>점검 활성</td><td id="checking">미수신</td></tr></table>
+<button id="low" disabled>GPIO18 LOW · 최대 5초</button><button id="high" disabled>GPIO18 HIGH · 최대 5초</button><button id="stop" disabled>점검 중지 · 기존 HIGH 복귀</button>
+<p>HIGH 복귀는 히터 OFF 확인이 아닙니다. 점검 동안 부하 전원 분리를 유지하세요. 히터가 설정된 보드, 오래된 펌웨어, 상태 미수신/오래된 상태에서는 점검 명령을 보내지 않습니다.</p></section>
+<section><h2>3. 관찰 결과와 보고서</h2><label for="observation">어느 릴레이의 표시가 바뀌었는지, 히터 선 연결을 확인했는지 적어주세요.</label><textarea id="observation" placeholder="예: LOW 때 두 번째 릴레이 LED 켜짐. 히터의 COM/NO 배선은 아직 미확인."></textarea><button id="save">점검 보고서 TXT 저장</button><textarea id="log" readonly aria-label="B보드 원문 로그"></textarea></section>
+</main><script>
+const el=id=>document.getElementById(id);
+let port=null,reader=null,writer=null,readTask=null,last=null,lastAt=0,logText='',sent=[],connecting=false;
+function log(text){logText=(logText+String(text)+'\n').slice(-65536);el('log').value=logText;el('log').scrollTop=el('log').scrollHeight;}
+function recognized(){return last?.firmware==='Aquarium-control-1.2.0' && last.heaterManualSupported===false && typeof last.pin18==='number';}
+function render(){
+ const current=recognized()&&Date.now()-lastAt<3500;
+ el('connect').disabled=!!port||connecting||!navigator.serial||!isSecureContext;el('disconnect').disabled=!port;
+ el('low').disabled=el('high').disabled=!port||!writer||!current||!el('ready').checked||last?.estop!==0;
+ el('stop').disabled=!port||!writer||!recognized();
+ if(port&&lastAt&&Date.now()-lastAt>=3500)el('phase').textContent='상태 수신이 오래되어 점검 차단 · 연결/펌웨어 확인';
+}
+async function send(command){
+ if(!writer)throw new Error('COM 연결이 없습니다.');
+ if(!['check18=0','check18=1','check18=stop'].includes(command))throw new Error('허용되지 않은 점검 명령');
+ if(command!=='check18=stop'&&(el('low').disabled||!el('ready').checked))throw new Error('부하 전원 분리·펌웨어 상태 확인이 필요합니다.');
+ sent.push({time:new Date().toISOString(),command});await writer.write(new TextEncoder().encode(command+'\n'));log('[USB SEND] '+command);
+}
+function receive(line){
+ log(line);let status;try{status=JSON.parse(line);}catch(_){return;}
+ if(!status||typeof status!=='object'||!status.firmware)return;
+ last=status;lastAt=Date.now();el('firmware').textContent=status.firmware;
+ el('locked').textContent=status.heaterManualSupported===false?'잠금 유지':status.heaterManualSupported===true?'활성화 상태 · 점검 차단':'확인 불가';
+ el('pin18').textContent=status.pin18===0?'LOW (0)':status.pin18===1?'HIGH (1)':'미수신';
+ el('checking').textContent=status.check18===true?'점검 중 · 최대 5초':status.check18===false?'점검 안 함':'미수신';
+ el('phase').textContent=recognized()?'B v1.2.0 잠금 상태 확인 · 부하 전원 분리 확인 후 GPIO18 점검 가능':'히터 잠금 v1.2.0이 아닙니다 · 점검 차단';render();
+}
+async function readLoop(){
+ const decoder=new TextDecoder();let buffer='';
+ try{while(reader){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});buffer=buffer.slice(-65536);let p;while((p=buffer.indexOf('\n'))>=0){receive(buffer.slice(0,p).replace(/\r$/,''));buffer=buffer.slice(p+1);}}}
+ catch(error){log('[READ] '+error.message);}
+ finally{if(reader){reader.releaseLock();reader=null;}if(port){last=null;lastAt=0;el('phase').textContent='USB 수신 종료 · 점검 중지';el('ready').checked=false;render();}}
+}
+async function disconnect(){
+ if(!port)return;
+ if(recognized()&&writer)try{await send('check18=stop');}catch(error){log(error.message);}
+ if(reader)try{await reader.cancel();}catch(error){log(error.message);}
+ if(readTask)await readTask;
+ if(writer){writer.releaseLock();writer=null;}
+ try{await port.close();}catch(error){log(error.message);}
+ port=null;last=null;lastAt=0;el('ready').checked=false;el('phase').textContent='연결 종료 · 부하 전원은 확인 전까지 분리 유지';render();
+}
+el('connect').addEventListener('click',async()=>{
+ connecting=true;last=null;lastAt=0;render();
+ try{const selected=await navigator.serial.requestPort();await selected.open({baudRate:115200});port=selected;writer=port.writable.getWriter();reader=port.readable.getReader();readTask=readLoop();el('phase').textContent='연결됨 · B 펌웨어 상태 수신 대기';}
+ catch(error){log(error.message);el('phase').textContent='연결 실패: '+error.message;if(port)await disconnect();}
+ finally{connecting=false;render();}
+});
+el('disconnect').addEventListener('click',disconnect);
+for(const [id,command] of [['low','check18=0'],['high','check18=1'],['stop','check18=stop']])el(id).addEventListener('click',async()=>{try{await send(command);}catch(error){log(error.message);}});
+el('ready').addEventListener('change',async()=>{if(!el('ready').checked&&last?.check18&&writer)try{await send('check18=stop');}catch(error){log(error.message);}render();});
+el('save').addEventListener('click',()=>{
+ const report='\uFEFFAquaControl GPIO18 히터 릴레이 점검 v1.2.0\n작성: '+new Date().toISOString()+'\n판정: GPIO 보고/사용자 관찰만 기록하며 실제 히터 연결·정지·가열을 자동 확인하지 않습니다.\n부하 전원 분리 확인: '+el('ready').checked+'\n최근 상태: '+JSON.stringify(last)+'\n명령: '+JSON.stringify(sent)+'\n사용자 관찰: '+el('observation').value+'\n\n원문 로그:\n'+logText;
+ const url=URL.createObjectURL(new Blob([report],{type:'text/plain;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='AquaControl-heater-relay-check-'+new Date().toISOString().replace(/[:.]/g,'-')+'.txt';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+});
+setInterval(render,500);render();
+</script></body></html>
